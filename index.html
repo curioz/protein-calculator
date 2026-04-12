@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>蛋白质成本计算器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- 从外部文件加载默认数据 -->
+  <script src="data.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Fira Sans','sans-serif'], mono: ['Fira Code','monospace'] },
+          colors: {
+            primary: { 50:'#EFF6FF',100:'#DBEAFE',200:'#BFDBFE',300:'#93C5FD',400:'#60A5FA',500:'#3B82F6',600:'#2563EB',700:'#1D4ED8',800:'#1E40AF',900:'#1E3A8A' },
+            accent: { 400:'#FBBF24',500:'#F59E0B',600:'#D97706' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @media (prefers-reduced-motion: reduce) { * { transition-duration:0.01ms!important; animation-duration:0.01ms!important; } }
+    body { font-family:'Fira Sans',sans-serif; background:#F8FAFC; color:#1E3A8A; }
+    .font-data { font-family:'Fira Code',monospace; }
+    .bar-fill { transition:width 0.5s ease-out; }
+    tr.data-row { transition:background-color 0.15s ease; }
+    tr.data-row:hover { background-color:#EFF6FF; }
+    .combo-item { animation:fadeIn 0.2s ease-out; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+    .preset-btn { transition:all 0.2s ease; }
+    .preset-btn:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.1); }
+    input[type="range"] { -webkit-appearance:none; appearance:none; height:6px; background:#DBEAFE; border-radius:3px; outline:none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; background:#1E40AF; border-radius:50%; cursor:pointer; }
+    .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1E40AF; color:white; padding:10px 24px; border-radius:8px; font-size:0.875rem; z-index:50; opacity:0; transition:opacity 0.3s ease; pointer-events:none; }
+    .toast.show { opacity:1; }
+    .modal-overlay { background:rgba(0,0,0,0.3); backdrop-filter:blur(2px); }
+    .modal-card { animation:fadeIn 0.15s ease-out; }
+    .drop-zone-active { outline:3px dashed #3B82F6; outline-offset:-3px; background:rgba(59,130,246,0.05)!important; }
+    .unsaved-dot { width:8px; height:8px; border-radius:50%; background:#F59E0B; display:inline-block; animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  </style>
+</head>
+<body class="min-h-screen">
+  <noscript><div style="padding:2rem;text-align:center;color:#991B1B;font-size:1.1rem;">本应用需要 JavaScript 支持，请启用后刷新页面。</div></noscript>
+
+  <!-- Nav -->
+  <nav class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-gray-200">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <svg class="w-7 h-7 text-primary-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13h2v8H3zm6-4h2v12H9zm6-6h2v18h-2zm6 10h2v8h-2z"/></svg>
+        <span class="font-semibold text-lg text-primary-900">蛋白质成本计算器</span>
+      </div>
+      <div class="flex gap-1 text-sm items-center">
+        <a href="#compare" class="hidden sm:inline px-2.5 py-1.5 rounded-lg hover:bg-primary-50 transition-colors cursor-pointer text-primary-700">对比表</a>
+        <a href="#builder" class="hidden sm:inline px-2.5 py-1.5 rounded-lg hover:bg-primary-50 transition-colors cursor-pointer text-primary-700">组合</a>
+        <a href="#chart" class="hidden sm:inline px-2.5 py-1.5 rounded-lg hover:bg-primary-50 transition-colors cursor-pointer text-primary-700">图表</a>
+        <div class="w-px h-5 bg-gray-200 mx-1 hidden sm:block"></div>
+        <button onclick="exportAsDataJs()" class="px-2.5 py-1.5 rounded-lg hover:bg-primary-50 transition-colors cursor-pointer text-primary-700 flex items-center gap-1.5" title="保存为 data.js（替换同目录文件即可永久生效）">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+          <span class="hidden sm:inline">保存到文件</span>
+          <span id="unsavedDot" class="unsaved-dot hidden" title="有未保存的修改"></span>
+        </button>
+        <button onclick="document.getElementById('importFile').click()" class="px-2.5 py-1.5 rounded-lg hover:bg-primary-50 transition-colors cursor-pointer text-primary-700 flex items-center gap-1" title="导入数据文件（支持 .json 和 .js）">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+          <span class="hidden sm:inline">导入</span>
+        </button>
+        <input type="file" id="importFile" accept=".json,.js" class="hidden" onchange="importData(event)">
+        <button onclick="resetData()" class="px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer text-red-500 flex items-center gap-1" title="重置为默认数据">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"/></svg>
+          <span class="hidden sm:inline">重置</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+
+    <!-- Hero -->
+    <section class="py-10 sm:py-14">
+      <h1 class="text-3xl sm:text-4xl font-bold text-primary-900 leading-tight">
+        每500g蛋白<br class="sm:hidden">
+        <span class="text-accent-500">花多少钱？</span>
+      </h1>
+      <p class="mt-3 text-primary-700/70 max-w-xl leading-relaxed">
+        基于2026年4月电商平台价格，对比常见蛋白质食品的真实购买成本。支持自定义价格、蛋白含量和品类。
+      </p>
+    </section>
+
+    <!-- Filter Bar + Actions -->
+    <section id="compare" class="mb-4">
+      <div class="flex flex-wrap gap-2 items-center">
+        <span class="text-sm font-medium text-primary-700 mr-1">品类：</span>
+        <div id="filterBar" class="flex flex-wrap gap-2 items-center"></div>
+        <div class="w-px h-5 bg-gray-200 mx-1"></div>
+        <button onclick="openAddFoodModal()" class="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 cursor-pointer transition-colors flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+          添加食品
+        </button>
+        <button onclick="toggleCatManager()" id="catMgrBtn" class="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">
+          管理品类
+        </button>
+      </div>
+    </section>
+
+    <!-- Category Manager (collapsible) -->
+    <section id="catManager" class="hidden mb-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div class="flex flex-wrap gap-2 items-center">
+          <span class="text-sm font-medium text-primary-700">已有品类：</span>
+          <div id="catList" class="flex flex-wrap gap-2"></div>
+          <div class="w-px h-5 bg-gray-200 mx-1"></div>
+          <div class="flex items-center gap-2">
+            <input type="text" id="newCatInput" placeholder="新品类名称" maxlength="10"
+              class="w-28 px-2.5 py-1 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-300 outline-none">
+            <button onclick="addCategory()" class="px-3 py-1 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 cursor-pointer transition-colors">
+              添加
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Comparison Table -->
+    <section class="mb-12">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" id="mainTable">
+            <thead>
+              <tr class="bg-primary-50 border-b border-primary-100">
+                <th class="text-left px-4 py-3 font-semibold text-primary-800 cursor-pointer select-none hover:bg-primary-100 transition-colors" onclick="sortBy('name')">
+                  食品 <span id="sort-name" class="text-xs ml-1 opacity-40">↕</span>
+                </th>
+                <th class="text-left px-4 py-3 font-semibold text-primary-800">品类</th>
+                <th class="text-right px-4 py-3 font-semibold text-primary-800 cursor-pointer select-none hover:bg-primary-100 transition-colors" onclick="sortBy('protein')">
+                  蛋白质(g/100g) <span id="sort-protein" class="text-xs ml-1 opacity-40">↕</span>
+                </th>
+                <th class="text-right px-4 py-3 font-semibold text-primary-800 cursor-pointer select-none hover:bg-primary-100 transition-colors" onclick="sortBy('price')">
+                  价格(元/kg) <span id="sort-price" class="text-xs ml-1 opacity-40">↕</span>
+                </th>
+                <th class="text-right px-4 py-3 font-semibold text-primary-800 cursor-pointer select-none hover:bg-primary-100 transition-colors" onclick="sortBy('cost')">
+                  每500g蛋白成本 <span id="sort-cost" class="text-xs ml-1 opacity-40">↕</span>
+                </th>
+                <th class="text-center px-4 py-3 font-semibold text-primary-800 w-36">操作</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Visual Chart -->
+    <section id="chart" class="mb-12">
+      <h2 class="text-xl font-bold text-primary-900 mb-4">每500g蛋白成本可视化</h2>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div style="position:relative; height:min(400px, 60vh);">
+          <canvas id="costChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Category Breakdown -->
+    <section id="catChart" class="mb-12">
+      <h2 class="text-xl font-bold text-primary-900 mb-4">品类蛋白与成本分布</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+          <h3 class="text-sm font-semibold text-primary-700 mb-3 text-center">各品类蛋白占比</h3>
+          <div style="position:relative; height:260px;"><canvas id="catProteinChart"></canvas></div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+          <h3 class="text-sm font-semibold text-primary-700 mb-3 text-center">各品类费用占比</h3>
+          <div style="position:relative; height:260px;"><canvas id="catCostChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Combo Builder -->
+    <section id="builder" class="mb-12">
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-primary-900">自定义每日蛋白组合</h2>
+          <p class="text-sm text-primary-700/60 mt-1">添加食材并调整用量，实时计算总蛋白和总费用</p>
+        </div>
+        <div class="flex gap-2">
+          <div class="flex items-center gap-2 text-sm">
+            <label for="targetProtein" class="text-primary-700 font-medium whitespace-nowrap">目标蛋白：</label>
+            <input type="number" id="targetProtein" value="110" min="50" max="250" step="5"
+              class="w-20 px-2 py-1 border border-gray-300 rounded-lg text-center font-data text-primary-900 focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none">
+            <span class="text-primary-700/60">g/天</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preset Plans -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <button onclick="loadPreset('A')" class="preset-btn bg-green-50 border-2 border-green-200 rounded-xl p-4 text-left cursor-pointer hover:border-green-400">
+          <div class="font-semibold text-green-800 text-sm">方案A · 极致省钱</div>
+          <div class="font-data text-green-700 mt-1">~110g蛋白 / ~9元/天</div>
+          <div class="text-xs text-green-600/70 mt-1">鸡蛋+豆腐+鸡胸肉+鸭肉</div>
+        </button>
+        <button onclick="loadPreset('B')" class="preset-btn bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-left cursor-pointer hover:border-blue-400">
+          <div class="font-semibold text-blue-800 text-sm">方案B · 均衡实用</div>
+          <div class="font-data text-blue-700 mt-1">~116g蛋白 / ~18元/天</div>
+          <div class="text-xs text-blue-600/70 mt-1">蛋奶+猪肉+鸡胸肉+蛋白粉</div>
+        </button>
+        <button onclick="loadPreset('C')" class="preset-btn bg-amber-50 border-2 border-amber-200 rounded-xl p-4 text-left cursor-pointer hover:border-amber-400">
+          <div class="font-semibold text-amber-800 text-sm">方案C · 口味多样</div>
+          <div class="font-data text-amber-700 mt-1">~115g蛋白 / ~31元/天</div>
+          <div class="text-xs text-amber-600/70 mt-1">即食鸡胸+牛肉+分离蛋白粉</div>
+        </button>
+      </div>
+
+      <!-- Combo Area -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2">
+          <div id="comboList" class="space-y-3 min-h-[120px]"></div>
+          <button onclick="clearCombo()" id="clearBtn" class="hidden mt-4 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg cursor-pointer transition-colors">
+            清空全部
+          </button>
+        </div>
+        <div class="lg:col-span-1">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 sticky top-20">
+            <h3 class="font-semibold text-primary-900 mb-4">每日摄入汇总</h3>
+            <div class="space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-primary-700/70 text-sm">总蛋白质</span>
+                <span class="font-data font-bold text-lg text-primary-900" id="totalProtein">0g</span>
+              </div>
+              <div class="w-full bg-gray-100 rounded-full h-2.5">
+                <div id="proteinBar" class="bg-primary-500 h-2.5 rounded-full bar-fill" style="width:0%"></div>
+              </div>
+              <div class="flex justify-between text-xs text-primary-700/50">
+                <span>0g</span>
+                <span id="targetLabel">目标 110g</span>
+              </div>
+              <div class="border-t border-gray-100 pt-3 flex justify-between items-center">
+                <span class="text-primary-700/70 text-sm">总费用</span>
+                <span class="font-data font-bold text-lg text-accent-600" id="totalCost">¥0.0</span>
+              </div>
+              <div class="border-t border-gray-100 pt-3 flex justify-between items-center">
+                <span class="text-primary-700/70 text-sm">每克蛋白成本</span>
+                <span class="font-data text-primary-900" id="perGramCost">-</span>
+              </div>
+              <div class="border-t border-gray-100 pt-3 flex justify-between items-center">
+                <span class="text-primary-700/70 text-sm">蛋白达标</span>
+                <span class="font-data font-bold text-lg" id="statusText">-</span>
+              </div>
+              <div class="border-t border-gray-100 pt-3">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="text-primary-700/70 text-sm">品类分布</span>
+                </div>
+                <div id="miniCatBars" class="space-y-1.5"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Notes -->
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-sm text-primary-700/70 leading-relaxed space-y-2">
+      <h3 class="font-semibold text-primary-900 text-base mb-2">备注</h3>
+      <p>1. 价格为2026年4月电商平台参考价，实际购买可能有10-30%波动。</p>
+      <p>2. <strong>数据保存方式</strong>：编辑后点击「保存到文件」下载 <code class="bg-gray-100 px-1 rounded text-xs">data.js</code>，替换同目录同名文件即可永久生效。也支持将文件拖拽到页面导入。</p>
+      <p>3. 动物蛋白和大豆蛋白为完全蛋白，其他植物蛋白可能缺乏某些必需氨基酸。</p>
+      <p>4. 坚果脂肪含量50%+，每日不宜超过30g。牛奶每100ml仅3.2-3.6g蛋白。</p>
+    </section>
+  </main>
+
+  <!-- Add/Edit Food Modal -->
+  <div id="foodModal" class="hidden fixed inset-0 z-40">
+    <div class="modal-overlay absolute inset-0" onclick="closeFoodModal()"></div>
+    <div class="modal-card absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-xl w-[95vw] max-w-md p-6 z-10">
+      <h3 id="modalTitle" class="font-bold text-primary-900 text-lg mb-5">添加食品</h3>
+      <input type="hidden" id="editIndex" value="-1">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-primary-700 mb-1">食品名称</label>
+          <input type="text" id="fmName" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-300 outline-none" placeholder="如：鸭胸肉">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-primary-700 mb-1">所属品类</label>
+          <select id="fmCat" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-300 outline-none"></select>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-primary-700 mb-1">蛋白质(g/100g)</label>
+            <input type="number" id="fmProtein" step="0.1" min="0.1" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-data focus:ring-2 focus:ring-primary-300 outline-none" placeholder="24">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-primary-700 mb-1">价格(元/kg)</label>
+            <input type="number" id="fmPrice" step="0.1" min="0.1" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-data focus:ring-2 focus:ring-primary-300 outline-none" placeholder="25">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-primary-700 mb-1">单位</label>
+            <select id="fmUnit" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-300 outline-none">
+              <option value="g">g（固体）</option>
+              <option value="ml">ml（液体）</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-primary-700 mb-1">备注</label>
+            <input type="text" id="fmNote" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-300 outline-none" placeholder="可选">
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button onclick="saveFood()" class="flex-1 py-2.5 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 cursor-pointer transition-colors text-sm">保存</button>
+        <button onclick="closeFoodModal()" class="flex-1 py-2.5 rounded-lg bg-gray-100 text-gray-600 font-medium hover:bg-gray-200 cursor-pointer transition-colors text-sm">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="confirmModal" class="hidden fixed inset-0 z-40">
+    <div class="modal-overlay absolute inset-0" onclick="closeConfirm()"></div>
+    <div class="modal-card absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-xl w-[90vw] max-w-sm p-6 z-10">
+      <p id="confirmMsg" class="text-primary-900 font-medium mb-5"></p>
+      <div class="flex gap-3">
+        <button onclick="confirmOk()" class="flex-1 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 cursor-pointer transition-colors text-sm">确认</button>
+        <button onclick="closeConfirm()" class="flex-1 py-2.5 rounded-lg bg-gray-100 text-gray-600 font-medium hover:bg-gray-200 cursor-pointer transition-colors text-sm">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // ========== HTML ESCAPE (XSS prevention) ==========
+    function esc(s) { if (s == null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+    // ========== COLOR PALETTE ==========
+    const PALETTE = [
+      { bg:'#FEE2E2', text:'#991B1B' },
+      { bg:'#FEF3C7', text:'#92400E' },
+      { bg:'#DBEAFE', text:'#1E40AF' },
+      { bg:'#D1FAE5', text:'#065F46' },
+      { bg:'#EDE9FE', text:'#5B21B6' },
+      { bg:'#FDE68A', text:'#78350F' },
+      { bg:'#FFE4E6', text:'#9F1239' },
+      { bg:'#CFFAFE', text:'#155E75' },
+      { bg:'#FCE7F3', text:'#9D174D' },
+      { bg:'#ECFDF5', text:'#064E3B' },
+      { bg:'#FFF7ED', text:'#9A3412' },
+      { bg:'#F0F9FF', text:'#0C4A6E' },
+    ];
+
+    function catColor(cat) {
+      const idx = state.categories.indexOf(cat);
+      const c = PALETTE[((idx === -1 ? 0 : idx) % PALETTE.length)];
+      return c;
+    }
+
+    function catTagHTML(cat) {
+      const c = catColor(cat);
+      return `<span style="background:${c.bg};color:${c.text}" class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold">${esc(cat)}</span>`;
+    }
+
+    // ========== STATE ==========
+    const LS_KEY = 'proteinCalcData';
+    let state = { categories: [], foods: [] };
+    let currentFilter = 'all';
+    let sortField = 'cost';
+    let sortDir = 1;
+    let comboItems = [];
+    let confirmCb = null;
+
+    function loadState() {
+      const defaults = window.PROTEIN_DB ? JSON.parse(JSON.stringify(window.PROTEIN_DB)) : null;
+      const saved = localStorage.getItem(LS_KEY);
+
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.categories && parsed.foods) {
+            // Check if data.js has a newer version than localStorage
+            const defaultVer = defaults?.version || '';
+            const savedVer = parsed.version || '';
+            if (defaultVer && defaultVer !== savedVer) {
+              // data.js has a new version — keep user data, update version tag
+              state = parsed;
+              state.version = defaultVer;
+              saveState();
+              setTimeout(() => showToast('数据文件已更新，如需最新默认数据请点击「重置」'), 500);
+              return;
+            }
+            state = parsed;
+            return;
+          }
+        } catch(e) {}
+      }
+      // No saved data or corrupted — use data.js defaults
+      if (defaults) {
+        state = defaults;
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(LS_KEY, JSON.stringify(state));
+      markDirty();
+    }
+
+    function recalcCosts() {
+      state.foods.forEach(f => {
+        f.cost = parseFloat((50 * f.price / f.protein).toFixed(1));
+      });
+    }
+
+    // ========== RENDER FILTER BAR ==========
+    function renderFilterBar() {
+      const bar = document.getElementById('filterBar');
+      bar.innerHTML = `<button onclick="toggleFilter('all')" class="cat-filter px-3 py-1 rounded-full text-sm font-medium cursor-pointer transition-colors ${currentFilter === 'all' ? 'bg-primary-800 text-white' : 'bg-gray-100 text-gray-600'}" data-cat="all">全部</button>`;
+      state.categories.forEach(cat => {
+        const c = catColor(cat);
+        const active = currentFilter === cat;
+        bar.innerHTML += `<button onclick="toggleFilter(this.dataset.cat)" class="cat-filter px-3 py-1 rounded-full text-sm font-medium cursor-pointer transition-colors" style="${active ? 'background:'+c.text+';color:white' : 'background:'+c.bg+';color:'+c.text}" data-cat="${esc(cat)}">${esc(cat)}</button>`;
+      });
+    }
+
+    // ========== RENDER CATEGORY MANAGER ==========
+    function renderCatManager() {
+      const list = document.getElementById('catList');
+      list.innerHTML = state.categories.map((cat, i) => {
+        const c = catColor(cat);
+        const hasFoods = state.foods.some(f => f.cat === cat);
+        return `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium" style="background:${c.bg};color:${c.text}">
+          ${esc(cat)}
+          <button onclick="removeCategory(${i})" class="hover:opacity-70 cursor-pointer" title="${hasFoods ? '该品类下有食品，无法删除' : '删除品类'}" ${hasFoods ? 'disabled style="opacity:0.3;cursor:not-allowed"' : ''}>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </span>`;
+      }).join('');
+    }
+
+    function toggleCatManager() {
+      const el = document.getElementById('catManager');
+      el.classList.toggle('hidden');
+      renderCatManager();
+    }
+
+    function addCategory() {
+      const input = document.getElementById('newCatInput');
+      const name = input.value.trim();
+      if (!name) return;
+      if (state.categories.includes(name)) { showToast('品类已存在'); return; }
+      state.categories.push(name);
+      input.value = '';
+      saveState();
+      renderFilterBar();
+      renderCatManager();
+      showToast('已添加品类: ' + name);
+    }
+
+    function removeCategory(index) {
+      const cat = state.categories[index];
+      if (state.foods.some(f => f.cat === cat)) {
+        showToast('该品类下有食品，请先删除相关食品');
+        return;
+      }
+      showConfirm(`确认删除品类「${cat}」？`, () => {
+        state.categories.splice(index, 1);
+        if (currentFilter === cat) currentFilter = 'all';
+        saveState();
+        renderAll();
+        showToast('已删除品类: ' + cat);
+      });
+    }
+
+    // ========== TABLE ==========
+    function renderTable() {
+      const tbody = document.getElementById('tableBody');
+      let filtered = currentFilter === 'all' ? [...state.foods] : state.foods.filter(f => f.cat === currentFilter);
+      filtered.sort((a, b) => {
+        const va = a[sortField], vb = b[sortField];
+        if (typeof va === 'string') return va.localeCompare(vb, 'zh') * sortDir;
+        return (va - vb) * sortDir;
+      });
+
+      tbody.innerHTML = filtered.map((f, _i) => {
+        const realIdx = state.foods.indexOf(f);
+        const inCombo = comboItems.some(c => c.food.name === f.name);
+        const costColor = f.cost < 50 ? 'text-green-700' : f.cost < 100 ? 'text-primary-800' : f.cost < 200 ? 'text-amber-600' : 'text-red-600';
+        return `
+          <tr class="data-row border-b border-gray-100">
+            <td class="px-4 py-3 font-medium text-primary-900">
+              <div>${esc(f.name)}${f.custom ? ' <span class="text-xs text-primary-400">(自定义)</span>' : ''}</div>
+              <div class="text-xs text-primary-700/40 mt-0.5">${esc(f.note || '')}</div>
+            </td>
+            <td class="px-4 py-3">${catTagHTML(f.cat)}</td>
+            <td class="px-4 py-3 text-right font-data text-primary-800">${f.protein}</td>
+            <td class="px-4 py-3 text-right font-data text-primary-800">${f.price}</td>
+            <td class="px-4 py-3 text-right">
+              <span class="font-data font-bold ${costColor}">¥${f.cost}</span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <div class="flex items-center justify-center gap-1">
+                <button onclick="openEditFoodModal(${realIdx})" class="p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors" title="编辑">
+                  <svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+                </button>
+                <button onclick="deleteFood(${realIdx})" class="p-1.5 rounded-lg hover:bg-red-50 cursor-pointer transition-colors" title="删除">
+                  <svg class="w-3.5 h-3.5 text-gray-500 hover:text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+                </button>
+                <button onclick="addToCombo(${realIdx})" class="px-2.5 py-1 text-xs font-medium rounded-lg cursor-pointer transition-colors ${inCombo ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-primary-50 text-primary-700 hover:bg-primary-100'}" ${inCombo ? 'disabled' : ''}>
+                  ${inCombo ? '已加' : '+ 组合'}
+                </button>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    function toggleFilter(cat) {
+      currentFilter = cat;
+      renderFilterBar();
+      renderTable();
+      renderChart();
+    }
+
+    function sortBy(field) {
+      if (sortField === field) sortDir *= -1;
+      else { sortField = field; sortDir = 1; }
+      document.querySelectorAll('[id^="sort-"]').forEach(el => el.style.opacity = '0.4');
+      const el = document.getElementById('sort-' + field);
+      if (el) { el.style.opacity = '1'; el.textContent = sortDir === 1 ? '↑' : '↓'; }
+      renderTable();
+    }
+
+    // ========== FOOD MODAL ==========
+    function populateCatSelect() {
+      const sel = document.getElementById('fmCat');
+      sel.innerHTML = state.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+
+    function openAddFoodModal() {
+      document.getElementById('modalTitle').textContent = '添加食品';
+      document.getElementById('editIndex').value = '-1';
+      document.getElementById('fmName').value = '';
+      document.getElementById('fmProtein').value = '';
+      document.getElementById('fmPrice').value = '';
+      document.getElementById('fmNote').value = '';
+      document.getElementById('fmUnit').value = 'g';
+      populateCatSelect();
+      document.getElementById('foodModal').classList.remove('hidden');
+    }
+
+    function openEditFoodModal(idx) {
+      const f = state.foods[idx];
+      document.getElementById('modalTitle').textContent = '编辑食品';
+      document.getElementById('editIndex').value = idx;
+      document.getElementById('fmName').value = f.name;
+      document.getElementById('fmProtein').value = f.protein;
+      document.getElementById('fmPrice').value = f.price;
+      document.getElementById('fmNote').value = f.note || '';
+      document.getElementById('fmUnit').value = f.unit || 'g';
+      populateCatSelect();
+      document.getElementById('fmCat').value = f.cat;
+      document.getElementById('foodModal').classList.remove('hidden');
+    }
+
+    function closeFoodModal() {
+      document.getElementById('foodModal').classList.add('hidden');
+    }
+
+    function saveFood() {
+      const idx = parseInt(document.getElementById('editIndex').value);
+      const name = document.getElementById('fmName').value.trim();
+      const cat = document.getElementById('fmCat').value;
+      const protein = parseFloat(document.getElementById('fmProtein').value);
+      const price = parseFloat(document.getElementById('fmPrice').value);
+      const note = document.getElementById('fmNote').value.trim();
+      const unit = document.getElementById('fmUnit').value;
+
+      if (!name) { showToast('请输入食品名称'); return; }
+      if (!protein || protein <= 0) { showToast('请输入有效的蛋白质含量'); return; }
+      if (!price || price <= 0) { showToast('请输入有效的价格'); return; }
+
+      // Check duplicate name (except when editing same item)
+      const dup = state.foods.findIndex(f => f.name === name);
+      if (dup !== -1 && dup !== idx) { showToast('该食品名称已存在'); return; }
+
+      const foodObj = { name, cat, protein, price, note, unit: unit === 'g' ? undefined : unit, custom: true };
+
+      if (idx === -1) {
+        state.foods.push(foodObj);
+        showToast('已添加: ' + name);
+      } else {
+        // Update combo references if name changed
+        const oldName = state.foods[idx].name;
+        if (oldName !== name) {
+          comboItems.forEach(c => { if (c.food.name === oldName) c.food.name = name; });
+        }
+        Object.assign(state.foods[idx], foodObj);
+        // Keep original custom flag if was false
+        if (!state.foods[idx].custom) state.foods[idx].custom = false;
+        showToast('已更新: ' + name);
+      }
+
+      recalcCosts();
+      saveState();
+      closeFoodModal();
+      renderAll();
+    }
+
+    function deleteFood(idx) {
+      const f = state.foods[idx];
+      showConfirm(`确认删除「${f.name}」？`, () => {
+        comboItems = comboItems.filter(c => c.food !== f);
+        state.foods.splice(idx, 1);
+        saveState();
+        renderAll();
+        showToast('已删除: ' + f.name);
+      });
+    }
+
+    // ========== COMBO BUILDER ==========
+    function addToCombo(idx) {
+      const food = state.foods[idx];
+      if (comboItems.some(c => c.food.name === food.name)) return;
+
+      let defaultGrams = 100;
+      if (food.unit === 'ml') defaultGrams = 250;
+      else if (food.cat === '蛋白粉') defaultGrams = 30;
+      else if (food.cat === '干果') defaultGrams = 25;
+      else if (food.name === '鸡蛋') defaultGrams = 120;
+      else if (food.name.includes('腐竹')) defaultGrams = 30;
+      else if (food.name.includes('黄豆') || food.name.includes('黑豆')) defaultGrams = 50;
+      else if (food.name === '藜麦(干)') defaultGrams = 50;
+
+      comboItems.push({ food, grams: defaultGrams });
+      renderCombo();
+      renderTable();
+      renderCatCharts();
+      showToast('已添加 ' + food.name);
+    }
+
+    function removeFromCombo(i) {
+      comboItems.splice(i, 1);
+      renderCombo();
+      renderTable();
+      renderCatCharts();
+    }
+
+    // Re-entrance guard: prevents input event cascade
+    let _updatingGrams = false;
+
+    function updateGrams(i, val) {
+      if (_updatingGrams) return;
+      _updatingGrams = true;
+      try {
+        comboItems[i].grams = Math.max(0, parseInt(val) || 0);
+        const item = comboItems[i];
+        const pG = (item.food.protein * item.grams / 100).toFixed(1);
+        const cY = (item.food.price * item.grams / 1000).toFixed(2);
+        const friendly = friendlyAmount(item.food, item.grams);
+
+        // Update display labels
+        const pEl = document.getElementById('cp-' + i);
+        const cEl = document.getElementById('cc-' + i);
+        const fEl = document.getElementById('cf-' + i);
+        if (pEl) pEl.textContent = pG + 'g蛋白';
+        if (cEl) cEl.textContent = '¥' + cY;
+        if (fEl) fEl.textContent = friendly;
+
+        // Sync the other input (range↔number) without triggering events
+        const rangeEl = document.querySelector(`#comboList input[type="range"][data-ci="${i}"]`);
+        const numEl = document.querySelector(`#comboList input[type="number"][data-ci="${i}"]`);
+        if (rangeEl) rangeEl.value = item.grams;
+        if (numEl) numEl.value = item.grams;
+
+        updateSummary();
+        catChartTimer();
+      } finally {
+        _updatingGrams = false;
+      }
+    }
+
+    function clearCombo() {
+      comboItems = [];
+      renderCombo();
+      renderTable();
+      renderCatCharts();
+    }
+
+    function renderCombo() {
+      const list = document.getElementById('comboList');
+      const clearBtn = document.getElementById('clearBtn');
+
+      if (comboItems.length === 0) {
+        list.innerHTML = `<div class="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-8 text-center text-gray-400">
+          <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+          点击对比表中的「+ 组合」，或选择上方预设方案</div>`;
+        clearBtn.classList.add('hidden');
+      } else {
+        clearBtn.classList.remove('hidden');
+
+        // Group by meal if meals exist
+        const hasMeals = comboItems.some(it => it.meal);
+        let html = '';
+
+        if (hasMeals) {
+          const mealOrder = ['早餐','午餐','晚餐','加餐'];
+          const mealIcons = { '早餐':'&#9788;','午餐':'&#9728;','晚餐':'&#9790;','加餐':'&#9749;' };
+          mealOrder.forEach(meal => {
+            const items = comboItems.map((it,i) => ({...it, _i:i})).filter(it => (it.meal || '') === meal);
+            if (items.length === 0) return;
+            html += `<div class="mb-1"><div class="text-xs font-semibold text-primary-500/60 uppercase tracking-wider mb-2 ml-1">${meal}</div>`;
+            html += items.map(item => comboItemHTML(item, item._i)).join('');
+            html += `</div>`;
+          });
+        } else {
+          html = comboItems.map((item, i) => comboItemHTML(item, i)).join('');
+        }
+        list.innerHTML = html;
+      }
+      updateSummary();
+    }
+
+    function comboItemHTML(item, i) {
+      const c = catColor(item.food.cat);
+      const pG = (item.food.protein * item.grams / 100).toFixed(1);
+      const cY = (item.food.price * item.grams / 1000).toFixed(2);
+      const friendly = friendlyAmount(item.food, item.grams);
+      return `<div class="combo-item bg-white border rounded-xl p-4" style="border-color:${c.bg}">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-semibold text-primary-900 text-sm">${esc(item.food.name)}</span>
+              ${catTagHTML(item.food.cat)}
+              <span id="cf-${i}" class="text-xs text-primary-500/50">${esc(friendly)}</span>
+            </div>
+            <div class="mt-2 flex items-center gap-3">
+              <input type="range" data-ci="${i}" min="0" max="${item.food.cat === '蛋白粉' ? 100 : item.food.unit === 'ml' ? 1000 : 500}" step="${item.food.unit === 'ml' ? 50 : 5}" value="${item.grams}"
+                oninput="updateGrams(${i},this.value)" class="flex-1" aria-label="${esc(item.food.name)}用量">
+              <input type="number" data-ci="${i}" value="${item.grams}" min="0" step="${item.food.unit === 'ml' ? 50 : 5}"
+                onchange="updateGrams(${i},this.value)"
+                class="w-16 px-2 py-1 border border-gray-300 rounded text-center font-data text-sm focus:ring-2 focus:ring-primary-300 outline-none" aria-label="${esc(item.food.name)}用量">
+              <span class="text-xs text-primary-700/50">${item.food.unit === 'ml' ? 'ml' : 'g'}</span>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            <div id="cp-${i}" class="font-data text-primary-900 font-semibold">${pG}g蛋白</div>
+            <div id="cc-${i}" class="font-data text-accent-600 text-sm">¥${cY}</div>
+            <button onclick="removeFromCombo(${i})" class="text-red-400 hover:text-red-600 mt-1 cursor-pointer transition-colors" aria-label="删除">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function updateSummary() {
+      const target = parseInt(document.getElementById('targetProtein').value) || 110;
+      let totalP = 0, totalC = 0;
+      const catData = {}; // { cat: { protein, cost } }
+      comboItems.forEach(item => {
+        const p = item.food.protein * item.grams / 100;
+        const c = item.food.price * item.grams / 1000;
+        totalP += p;
+        totalC += c;
+        const cat = item.food.cat;
+        if (!catData[cat]) catData[cat] = { protein: 0, cost: 0 };
+        catData[cat].protein += p;
+        catData[cat].cost += c;
+      });
+
+      document.getElementById('totalProtein').textContent = totalP.toFixed(1) + 'g';
+      document.getElementById('totalCost').textContent = '¥' + totalC.toFixed(1);
+      document.getElementById('proteinBar').style.width = Math.min(100, (totalP / target * 100)).toFixed(0) + '%';
+      document.getElementById('targetLabel').textContent = '目标 ' + target + 'g';
+
+      const bar = document.getElementById('proteinBar');
+      bar.className = 'h-2.5 rounded-full bar-fill ' + (totalP >= target ? 'bg-green-500' : totalP >= target * 0.8 ? 'bg-accent-500' : 'bg-primary-500');
+
+      document.getElementById('perGramCost').textContent = totalP > 0 ? '¥' + (totalC / totalP).toFixed(2) + '/g' : '-';
+
+      const statusEl = document.getElementById('statusText');
+      const pct = (totalP / target * 100).toFixed(0);
+      if (totalP === 0) { statusEl.textContent = '-'; statusEl.className = 'font-data font-bold text-lg text-gray-400'; }
+      else if (totalP >= target) { statusEl.textContent = pct + '% 达标'; statusEl.className = 'font-data font-bold text-lg text-green-700'; }
+      else { statusEl.textContent = pct + '% 不足'; statusEl.className = 'font-data font-bold text-lg text-amber-600'; }
+
+      // Mini category bars
+      const miniBars = document.getElementById('miniCatBars');
+      if (totalP > 0 && Object.keys(catData).length > 0) {
+        miniBars.innerHTML = Object.entries(catData).sort((a,b) => b[1].protein - a[1].protein).map(([cat, d]) => {
+          const c = catColor(cat);
+          const pctP = (d.protein / totalP * 100).toFixed(0);
+          return `<div class="flex items-center gap-2 text-xs">
+            <span class="w-12 text-right truncate" style="color:${c.text}">${esc(cat)}</span>
+            <div class="flex-1 bg-gray-100 rounded-full h-2">
+              <div class="h-2 rounded-full bar-fill" style="width:${pctP}%;background:${c.text}"></div>
+            </div>
+            <span class="font-data text-primary-700/60 w-14 text-right">${pctP}% ${d.protein.toFixed(1)}g</span>
+          </div>`;
+        }).join('');
+      } else {
+        miniBars.innerHTML = '';
+      }
+    }
+
+    // ========== FRIENDLY UNITS ==========
+    function friendlyAmount(food, grams) {
+      if (food.name === '鸡蛋') { return Math.round(grams / 60) + '个(' + grams + 'g)'; }
+      if (food.unit === 'ml') { return grams + 'ml'; }
+      if (food.name.includes('蛋白粉')) { return grams + 'g(约' + Math.max(1, Math.round(grams / 30)) + '勺)'; }
+      if (food.name === '干黄豆' || food.name === '黑豆(干)') { return grams + 'g(泡发约' + Math.round(grams * 2.2) + 'g)'; }
+      if (food.name === '藜麦(干)') { return grams + 'g(煮熟约' + Math.round(grams * 3) + 'g)'; }
+      if (food.name === '腐竹(干)') { return grams + 'g(泡发约' + Math.round(grams * 3) + 'g)'; }
+      if (food.name === '北豆腐') { return grams + 'g(约' + (grams / 150).toFixed(1) + '块)'; }
+      if (food.name === '花生酱') { return grams + 'g(约' + Math.round(grams / 15) + '汤匙)'; }
+      return grams + 'g';
+    }
+
+    // ========== PRESETS ==========
+    function loadPreset(plan) {
+      comboItems = [];
+      const presets = {
+        A: [
+          { n:'鸡蛋',          g:120, meal:'早餐' },
+          { n:'北豆腐',        g:150, meal:'早餐' },
+          { n:'鸡胸肉(冷冻)',  g:150, meal:'午餐' },
+          { n:'豆腐干',        g:80,  meal:'午餐' },
+          { n:'鸭肉(冷冻白条鸭)', g:100, meal:'晚餐' },
+          { n:'腐竹(干)',      g:15,  meal:'晚餐' },
+          { n:'花生(带壳生)',  g:25,  meal:'加餐' },
+        ],
+        B: [
+          { n:'鸡蛋',              g:120, meal:'早餐' },
+          { n:'纯牛奶(普通)',      g:250, meal:'早餐' },
+          { n:'猪瘦肉',            g:150, meal:'午餐' },
+          { n:'北豆腐',            g:100, meal:'午餐' },
+          { n:'乳清蛋白粉(浓缩)',  g:30,  meal:'加餐' },
+          { n:'鸡胸肉(冷冻)',      g:120, meal:'晚餐' },
+        ],
+        C: [
+          { n:'鸡蛋',              g:120, meal:'早餐' },
+          { n:'纯牛奶(普通)',      g:250, meal:'早餐' },
+          { n:'即食鸡胸肉',        g:100, meal:'午餐' },
+          { n:'腐竹(干)',          g:20,  meal:'午餐' },
+          { n:'乳清蛋白粉(分离)',  g:30,  meal:'加餐' },
+          { n:'南瓜子(带壳)',      g:20,  meal:'加餐' },
+          { n:'牛肉(鲜)',          g:120, meal:'晚餐' },
+        ],
+      };
+      presets[plan].forEach(p => {
+        const food = state.foods.find(f => f.name === p.n);
+        if (food) comboItems.push({ food, grams: p.g, meal: p.meal });
+      });
+      renderCombo(); renderTable(); renderCatCharts();
+      showToast('已加载方案 ' + plan);
+      document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('ring-2','ring-green-400','ring-blue-400','ring-amber-400'));
+      const ci = {A:0,B:1,C:2}[plan];
+      document.querySelectorAll('.preset-btn')[ci]?.classList.add('ring-2', {A:'ring-green-400',B:'ring-blue-400',C:'ring-amber-400'}[plan]);
+    }
+
+    // ========== CHART ==========
+    let chartInstance = null;
+    function renderChart() {
+      let foods = currentFilter === 'all' ? [...state.foods] : state.foods.filter(f => f.cat === currentFilter);
+      const sorted = foods.sort((a, b) => a.cost - b.cost);
+      const ctx = document.getElementById('costChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      // Dynamic height: ~28px per bar, min 200px
+      const chartWrapper = ctx.canvas.parentElement;
+      chartWrapper.style.height = Math.max(200, sorted.length * 28) + 'px';
+
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: sorted.map(f => f.name),
+          datasets: [{
+            label: '每500g蛋白成本 (元)',
+            data: sorted.map(f => f.cost),
+            backgroundColor: sorted.map(f => f.cost < 40 ? '#16A34A' : f.cost < 60 ? '#2563EB' : f.cost < 100 ? '#D97706' : f.cost < 200 ? '#EA580C' : '#DC2626'),
+            borderRadius: 4, borderSkipped: false,
+          }]
+        },
+        options: {
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '¥' + ctx.raw.toFixed(1) } } },
+          scales: {
+            x: { title: { display: true, text: '每500g蛋白成本 (元)', font: { family: 'Fira Sans' } }, grid: { color: '#F1F5F9' }, ticks: { font: { family: 'Fira Code', size: 11 } } },
+            y: { grid: { display: false }, ticks: { font: { family: 'Fira Sans', size: 12 } } }
+          },
+          onClick: (e, elements) => {
+            if (elements.length > 0) {
+              const idx = state.foods.indexOf(sorted[elements[0].index]);
+              if (idx >= 0) addToCombo(idx);
+            }
+          }
+        }
+      });
+    }
+
+    // ========== CATEGORY DOUGHNUT CHARTS ==========
+    let catProteinChart = null, catCostChart = null;
+    let _catChartTimer = null;
+    function catChartTimer() {
+      clearTimeout(_catChartTimer);
+      _catChartTimer = setTimeout(renderCatCharts, 200);
+    }
+
+    function renderCatCharts() {
+      // Aggregate by category from combo items
+      const catData = {};
+      comboItems.forEach(item => {
+        const cat = item.food.cat;
+        if (!catData[cat]) catData[cat] = { protein: 0, cost: 0 };
+        catData[cat].protein += item.food.protein * item.grams / 100;
+        catData[cat].cost += item.food.price * item.grams / 1000;
+      });
+
+      const cats = Object.keys(catData);
+      const colors = cats.map(c => catColor(c).text);
+      const bgColors = cats.map(c => catColor(c).bg);
+
+      if (cats.length === 0) {
+        if (catProteinChart) catProteinChart.destroy();
+        if (catCostChart) catCostChart.destroy();
+        catProteinChart = null;
+        catCostChart = null;
+        return;
+      }
+
+      const doughnutOpts = (label) => ({
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '55%',
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'Fira Sans', size: 11 }, padding: 12, usePointStyle: true, pointStyleWidth: 8 } },
+          tooltip: { callbacks: { label: ctx => ctx.label + ': ' + ctx.raw.toFixed(1) + label } }
+        }
+      });
+
+      if (catProteinChart) catProteinChart.destroy();
+      catProteinChart = new Chart(document.getElementById('catProteinChart').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: cats, datasets: [{ data: cats.map(c => +catData[c].protein.toFixed(1)), backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+        options: doughnutOpts('g蛋白')
+      });
+
+      if (catCostChart) catCostChart.destroy();
+      catCostChart = new Chart(document.getElementById('catCostChart').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: cats, datasets: [{ data: cats.map(c => +catData[c].cost.toFixed(2)), backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+        options: doughnutOpts('元')
+      });
+    }
+
+    // ========== IMPORT / EXPORT ==========
+    let savedFileHash = '';
+
+    function hashState() {
+      return JSON.stringify({ c: state.categories, f: state.foods.map(x => ({ n:x.name, c:x.cat, p:x.protein, $:x.price })) });
+    }
+
+    function markDirty() {
+      const dot = document.getElementById('unsavedDot');
+      if (dot && hashState() !== savedFileHash) dot.classList.remove('hidden');
+      else if (dot) dot.classList.add('hidden');
+    }
+
+    function markClean() {
+      savedFileHash = hashState();
+      const dot = document.getElementById('unsavedDot');
+      if (dot) dot.classList.add('hidden');
+    }
+
+    function exportAsDataJs() {
+      // Generate data.js format content
+      const foodsStr = state.foods.map(f => {
+        const obj = { name: f.name, cat: f.cat, protein: f.protein, price: f.price };
+        if (f.note) obj.note = f.note;
+        if (f.unit && f.unit !== 'g') obj.unit = f.unit;
+        return '    ' + JSON.stringify(obj);
+      }).join(',\n');
+
+      const catsStr = state.categories.map(c => '    ' + JSON.stringify(c)).join(',\n');
+
+      const content = `/**
+ * 蛋白质食品数据库
+ * 由蛋白质成本计算器自动生成 - ${new Date().toLocaleDateString('zh-CN')}
+ *
+ * 品类: ${state.categories.join(', ')}
+ * 食品: ${state.foods.length} 种
+ */
+window.PROTEIN_DB = {
+  "version": "${new Date().toISOString().slice(0,10)}",
+  "categories": [
+${catsStr}
+  ],
+  "foods": [
+${foodsStr}
+  ]
+};
+`;
+      const blob = new Blob([content], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'data.js';
+      a.click();
+      URL.revokeObjectURL(url);
+      markClean();
+      showToast('已保存 data.js — 请替换同目录同名文件');
+    }
+
+    function parseImportContent(text) {
+      // Try parsing as plain JSON first
+      try {
+        const data = JSON.parse(text);
+        if (data.categories && data.foods) return data;
+      } catch(e) {}
+
+      // Try extracting JSON from data.js format (window.PROTEIN_DB = {...})
+      const match = text.match(/window\.PROTEIN_DB\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+      if (match) {
+        try {
+          const data = JSON.parse(match[1]);
+          if (data.categories && data.foods) return data;
+        } catch(e) {}
+      }
+
+      return null;
+    }
+
+    function applyImport(data) {
+      if (!data) { showToast('无法识别文件格式'); return; }
+      let ok = true;
+      data.foods.forEach(f => {
+        if (!f.name || !f.cat || !f.protein || !f.price) ok = false;
+        if (!data.categories.includes(f.cat)) ok = false;
+      });
+      if (!ok) { showToast('数据校验失败，请检查品类和食品数据'); return; }
+      state = data;
+      recalcCosts();
+      saveState();
+      currentFilter = 'all';
+      comboItems = [];
+      markDirty();
+      renderAll();
+      showToast('导入成功，共 ' + state.foods.length + ' 种食品');
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = parseImportContent(e.target.result);
+        applyImport(data);
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      document.body.classList.remove('drop-zone-active');
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      if (!file.name.endsWith('.json') && !file.name.endsWith('.js')) {
+        showToast('请拖入 .json 或 .js 文件');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => applyImport(parseImportContent(ev.target.result));
+      reader.readAsText(file);
+    }
+
+    function resetData() {
+      showConfirm('确认重置为默认数据？所有自定义修改将丢失。', () => {
+        localStorage.removeItem(LS_KEY);
+        if (window.PROTEIN_DB) {
+          state = JSON.parse(JSON.stringify(window.PROTEIN_DB));
+          recalcCosts();
+        }
+        currentFilter = 'all';
+        comboItems = [];
+        saveState();
+        markDirty();
+        renderAll();
+        showToast('已重置为默认数据');
+      });
+    }
+
+    // ========== CONFIRM ==========
+    function showConfirm(msg, cb) {
+      document.getElementById('confirmMsg').textContent = msg;
+      confirmCb = cb;
+      document.getElementById('confirmModal').classList.remove('hidden');
+    }
+    function closeConfirm() {
+      document.getElementById('confirmModal').classList.add('hidden');
+      confirmCb = null;
+    }
+    function confirmOk() {
+      if (confirmCb) confirmCb();
+      closeConfirm();
+    }
+
+    // ========== TOAST ==========
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => t.classList.remove('show'), 1800);
+    }
+
+    // ========== RENDER ALL ==========
+    function renderAll() {
+      renderFilterBar();
+      renderCatManager();
+      renderTable();
+      renderChart();
+      renderCatCharts();
+      renderCombo();
+    }
+
+    // ========== INIT ==========
+    document.getElementById('targetProtein').addEventListener('input', updateSummary);
+    document.getElementById('newCatInput').addEventListener('keydown', e => { if (e.key === 'Enter') addCategory(); });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (!document.getElementById('foodModal').classList.contains('hidden')) closeFoodModal();
+        else if (!document.getElementById('confirmModal').classList.contains('hidden')) closeConfirm();
+      }
+    });
+
+    // Drag and drop
+    document.body.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drop-zone-active'); });
+    document.body.addEventListener('dragleave', e => { if (!e.relatedTarget || !document.body.contains(e.relatedTarget)) document.body.classList.remove('drop-zone-active'); });
+    document.body.addEventListener('drop', handleDrop);
+
+    loadState();
+    recalcCosts();
+    markClean();
+    renderAll();
+  </script>
+</body>
+</html>
