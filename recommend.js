@@ -97,6 +97,31 @@
     '乳清蛋白粉(分离)': [25, 35]
   };
 
+  // 实用计量单位：{ unit: 单位名, grams: 每单位克数 }
+  var PRACTICAL_UNITS = {
+    '鸡蛋':             { unit: '个',  g: 50  },
+    '纯牛奶(普通)':     { unit: '盒',  g: 250 },
+    '纯牛奶(高端)':     { unit: '盒',  g: 250 },
+    '豆浆':             { unit: '杯',  g: 300 },
+    '希腊酸奶':         { unit: '盒',  g: 150 },
+    '奶酪(硬质)':       { unit: '片',  g: 30  },
+    '北豆腐':           { unit: '块',  g: 150 },
+    '豆腐干':           { unit: '块',  g: 50  },
+    '腐竹(干)':         { unit: '根',  g: 30  },
+    '干黄豆':           { unit: '把',  g: 30  },
+    '黑豆(干)':         { unit: '把',  g: 30  },
+    '天贝':             { unit: '块',  g: 100 },
+    '藜麦(干)':         { unit: '份',  g: 50  },
+    '花生(带壳生)':     { unit: '把',  g: 30  },
+    '南瓜子(带壳)':     { unit: '把',  g: 30  },
+    '杏仁(巴旦木)':     { unit: '把',  g: 25  },
+    '混合坚果':         { unit: '包',  g: 25  },
+    '花生酱':           { unit: '勺',  g: 20  },
+    '大豆分离蛋白粉':   { unit: '勺',  g: 30  },
+    '乳清蛋白粉(浓缩)': { unit: '勺',  g: 30  },
+    '乳清蛋白粉(分离)': { unit: '勺',  g: 30  }
+  };
+
   function getRandomServing(food) {
     var range = SERVING_MAP[food.name];
     if (!range) {
@@ -110,10 +135,14 @@
   }
 
   function formatAmount(food, grams) {
-    if (food.name === '鸡蛋') {
-      var count = Math.round(grams / 50);
-      return '×' + Math.max(1, count);
+    var pu = PRACTICAL_UNITS[food.name];
+    if (pu) {
+      var count = Math.round(grams / pu.g);
+      count = Math.max(1, count);
+      var actual = count * pu.g;
+      return count + pu.unit + '(' + actual + (food.unit === 'ml' ? 'ml' : 'g') + ')';
     }
+    // 无映射的肉类等，按份显示
     if (food.unit === 'ml') return grams + 'ml';
     return grams + 'g';
   }
@@ -148,11 +177,13 @@
   }
 
   function snapToServing(food, grams) {
-    var range = SERVING_MAP[food.name];
-    if (food.name === '鸡蛋') {
-      var count = Math.round(grams / 50);
-      return Math.max(1, count) * 50;
+    // 优先按实用单位对齐
+    var pu = PRACTICAL_UNITS[food.name];
+    if (pu) {
+      var count = Math.round(grams / pu.g);
+      return Math.max(1, count) * pu.g;
     }
+    var range = SERVING_MAP[food.name];
     if (range) {
       if (grams <= range[0]) return range[0];
       if (grams >= range[1]) return range[1];
@@ -306,9 +337,9 @@
     var label = MEAL_LABELS[slot];
 
     var itemsHtml = mealData.items.map(function(item) {
-      return '<div class="flex justify-between text-sm">' +
-        '<span class="text-slate-700">' + item.name + '</span>' +
-        '<span class="text-slate-400 font-data text-xs">' + item.protein + 'g</span>' +
+      return '<div class="flex justify-between text-sm items-center">' +
+        '<span class="text-slate-700">' + item.name + ' <span class="text-xs text-slate-400">' + item.amount + '</span></span>' +
+        '<span class="text-slate-400 font-data text-xs">' + item.protein + 'g蛋白</span>' +
       '</div>';
     }).join('');
 
