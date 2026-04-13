@@ -264,6 +264,78 @@
     localStorage.setItem(STORAGE_TODAY, JSON.stringify(plan));
   }
 
+  // ========== UI 渲染 ==========
+  function $(id) { return document.getElementById(id); }
+
+  function renderDate() {
+    var now = new Date();
+    var weekDays = ['日','一','二','三','四','五','六'];
+    $('dateDisplay').textContent =
+      now.getFullYear() + '/' + (now.getMonth()+1) + '/' + now.getDate() + ' 周' + weekDays[now.getDay()];
+  }
+
+  function renderTargetCard(plan, settings) {
+    var totalProtein = 0, totalCost = 0;
+    MEAL_SLOTS.forEach(function(slot) {
+      var meal = plan.meals[slot];
+      if (meal) {
+        totalProtein += meal.totalProtein;
+        totalCost += meal.totalCost;
+      }
+    });
+    totalProtein = +totalProtein.toFixed(1);
+    totalCost = +totalCost.toFixed(1);
+
+    $('targetDisplay').textContent = settings.proteinTarget + 'g';
+    var pct = Math.min(100, Math.round(totalProtein / settings.proteinTarget * 100));
+    $('progressBar').style.width = pct + '%';
+    $('progressText').textContent = '已选 ' + totalProtein + 'g / ' + settings.proteinTarget + 'g';
+    $('totalCost').textContent = '预估 ¥' + totalCost;
+  }
+
+  function renderMealCard(slot, mealData, settings) {
+    var idx = MEAL_SLOTS.indexOf(slot);
+    var target = +(settings.proteinTarget * settings.ratios[idx]).toFixed(0);
+    var color = MEAL_COLORS[slot];
+    var icon = MEAL_ICONS[slot];
+    var label = MEAL_LABELS[slot];
+
+    var itemsHtml = mealData.items.map(function(item) {
+      return '<div class="flex justify-between text-sm">' +
+        '<span class="text-slate-700">' + item.name + '</span>' +
+        '<span class="text-slate-400 font-data text-xs">' + item.protein + 'g</span>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="meal-card bg-white border border-slate-200 rounded-xl overflow-hidden" style="border-left:4px solid ' + color + '">' +
+      '<div class="p-3">' +
+        '<div class="flex justify-between items-center mb-2">' +
+          '<div>' +
+            '<span class="font-semibold">' + icon + ' ' + label + '</span>' +
+            '<span class="text-xs text-slate-400 ml-1.5">目标 ' + target + 'g</span>' +
+          '</div>' +
+          '<button class="regenerate-slot text-xs bg-slate-100 px-2.5 py-1 rounded-md active:bg-slate-200" data-slot="' + slot + '">换一套</button>' +
+        '</div>' +
+        '<div class="space-y-1.5">' + itemsHtml + '</div>' +
+        '<div class="border-t border-slate-100 mt-2 pt-1.5 flex justify-between text-xs font-semibold text-emerald-600">' +
+          '<span>蛋白质 ' + mealData.totalProtein + 'g</span>' +
+          '<span>¥' + mealData.totalCost + '</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderAllMeals(plan, settings) {
+    var html = '';
+    MEAL_SLOTS.forEach(function(slot) {
+      if (plan.meals[slot]) {
+        html += renderMealCard(slot, plan.meals[slot], settings);
+      }
+    });
+    $('mealsContainer').innerHTML = html;
+    renderTargetCard(plan, settings);
+  }
+
   // ========== 暴露到全局 ==========
   window.RecommendApp = {
     loadSettings: loadSettings,
@@ -282,6 +354,9 @@
     selectMeal: selectMeal,
     generatePlan: generatePlan,
     regenerateSlot: regenerateSlot,
+    renderDate: renderDate,
+    renderAllMeals: renderAllMeals,
+    renderTargetCard: renderTargetCard,
     MEAL_SLOTS: MEAL_SLOTS,
     MEAL_LABELS: MEAL_LABELS,
     MEAL_ICONS: MEAL_ICONS,
