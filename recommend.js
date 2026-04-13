@@ -58,10 +58,15 @@
   function getUsageCounts(history) {
     var counts = {};
     history.forEach(function(day) {
-      day.meals.forEach(function(meal) {
-        meal.items.forEach(function(item) {
-          counts[item.name] = (counts[item.name] || 0) + 1;
-        });
+      var mealSlots = day.meals;
+      // meals 可能是对象 {breakfast:..., lunch:...} 而非数组
+      var slots = Array.isArray(mealSlots) ? mealSlots : Object.keys(mealSlots).map(function(k) { return mealSlots[k]; });
+      slots.forEach(function(meal) {
+        if (meal && meal.items) {
+          meal.items.forEach(function(item) {
+            counts[item.name] = (counts[item.name] || 0) + 1;
+          });
+        }
       });
     });
     return counts;
@@ -361,6 +366,7 @@
       var btn = e.target.closest('.regenerate-slot');
       if (!btn) return;
       var slot = btn.getAttribute('data-slot');
+      btn.textContent = '...';
       regenerateSlotAndRender(slot);
     });
 
@@ -495,7 +501,7 @@
   }
 
   // ========== 启动 ==========
-  document.addEventListener('DOMContentLoaded', init);
+  init();
 
   // ========== 暴露到全局 ==========
   window.RecommendApp = {
