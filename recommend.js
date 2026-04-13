@@ -336,6 +336,167 @@
     renderTargetCard(plan, settings);
   }
 
+  // ========== 事件绑定与初始化 ==========
+  var currentPlan = null;
+  var currentSettings = null;
+
+  function init() {
+    currentSettings = loadSettings();
+    renderDate();
+
+    // 尝试加载今日已有推荐
+    currentPlan = loadToday();
+    if (!currentPlan) {
+      generateAndRender();
+    } else {
+      renderAllMeals(currentPlan, currentSettings);
+    }
+
+    // 绑定事件
+    $('regenerateAllBtn').addEventListener('click', function() {
+      generateAndRender();
+    });
+
+    $('mealsContainer').addEventListener('click', function(e) {
+      var btn = e.target.closest('.regenerate-slot');
+      if (!btn) return;
+      var slot = btn.getAttribute('data-slot');
+      regenerateSlotAndRender(slot);
+    });
+
+    // 设置弹窗
+    $('settingsBtn').addEventListener('click', openSettings);
+    $('settingsClose').addEventListener('click', closeSettings);
+    $('settingsOverlay').addEventListener('click', closeSettings);
+    $('settingsSave').addEventListener('click', saveSettingsAndRegenerate);
+  }
+
+  function generateAndRender() {
+    var foods = window.PROTEIN_DB.foods;
+    var history = loadHistory();
+    currentPlan = generatePlan(foods, currentSettings, history);
+    saveToday(currentPlan);
+    recordToHistory(currentPlan);
+    renderAllMeals(currentPlan, currentSettings);
+  }
+
+  function regenerateSlotAndRender(slot) {
+    var foods = window.PROTEIN_DB.foods;
+    var history = loadHistory();
+    var newMeal = regenerateSlot(foods, currentSettings, history, slot);
+    currentPlan.meals[slot] = newMeal;
+    saveToday(currentPlan);
+    renderAllMeals(currentPlan, currentSettings);
+  }
+
+  function recordToHistory(plan) {
+    var history = loadHistory();
+    var todayKey = getTodayKey();
+    // 如果今天已有记录，更新它；否则新增
+    var found = false;
+    for (var i = 0; i < history.length; i++) {
+      if (history[i].date === todayKey) {
+        history[i].meals = plan.meals;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      history.push({ date: todayKey, meals: plan.meals });
+    }
+    history = cleanupHistory(history);
+    saveHistory(history);
+  }
+
+  // ========== 设置弹窗 ==========
+  function openSettings() {
+    $('proteinInput').value = currentSettings.proteinTarget;
+    renderRatioSliders(currentSettings.ratios);
+    $('settingsModal').classList.remove('hidden');
+  }
+
+  function closeSettings() {
+    $('settingsModal').classList.add('hidden');
+  }
+
+  function renderRatioSliders(ratios) {
+    var labels = ['早餐', '午餐', '晚餐', '加餐'];
+    var html = '';
+    ratios.forEach(function(r, i) {
+      var pct = Math.round(r * 100);
+      html += '<div class="flex items-center gap-3">' +
+        '<span class="text-sm text-slate-600 w-10">' + labels[i] + '</span>' +
+        '<input type="range" class="flex-1 ratio-slider" min="5" max="60" value="' + pct + '" data-index="' + i + '">' +
+        '<span class="text-sm font-data text-slate-700 w-10 text-right ratio-display">' + pct + '%</span>' +
+      '</div>';
+    });
+    $('ratioSliders').innerHTML = html;
+
+    // 绑定 slider 事件
+    var sliders = document.querySelectorAll('.ratio-slider');
+    sliders.forEach(function(slider) {
+      slider.addEventListener('input', handleRatioChange);
+    });
+    updateRatioSum(ratios);
+  }
+
+  function handleRatioChange(e) {
+    var idx = parseInt(e.target.getAttribute('data-index'));
+    var newVal = parseInt(e.target.value) / 100;
+    var ratios = currentSettings.ratios.slice();
+
+    // 计算剩余份额
+    var oldVal = ratios[idx];
+    var diff = newVal - oldVal;
+    var remaining = 1 - newVal;
+
+    // 其他 slot 按原有比例分配剩余
+    var otherSum = 0;
+    ratios.forEach(function(r, i) { if (i !== idx) otherSum += r; });
+
+    ratios[idx] = newVal;
+    if (otherSum > 0) {
+      for (var i = 0; i < ratios.length; i++) {
+        if (i !== idx) {
+          ratios[i] = +(ratios[i] / otherSum * remaining).toFixed(3);
+        }
+      }
+    }
+
+    // 更新 slider 显示值
+    var sliders = document.querySelectorAll('.ratio-slider');
+    var displays = document.querySelectorAll('.ratio-display');
+    ratios.forEach(function(r, i) {
+      var pct = Math.round(r * 100);
+      sliders[i].value = pct;
+      displays[i].textContent = pct + '%';
+    });
+
+    currentSettings.ratios = ratios;
+    updateRatioSum(ratios);
+  }
+
+  function updateRatioSum(ratios) {
+    var sum = ratios.reduce(function(a, b) { return a + b; }, 0);
+    var pct = Math.round(sum * 100);
+    $('ratioSum').textContent = '合计 ' + pct + '%';
+    $('ratioSum').className = 'text-xs mt-1 text-right ' +
+      (pct === 100 ? 'text-slate-400' : 'text-red-500 font-semibold');
+  }
+
+  function saveSettingsAndRegenerate() {
+    var target = parseInt($('proteinInput').value);
+    if (target >= 50 && target <= 300) {
+      currentSettings.proteinTarget = target;
+    }
+    saveSettings(currentSettings);
+    closeSettings();
+    generateAndRender();
+  }
+
+  // ========== 启动 ==========
+  document.addEventListener('DOMContentLoaded', init);
+
   // ========== 暴露到全局 ==========
   window.RecommendApp = {
     loadSettings: loadSettings,
