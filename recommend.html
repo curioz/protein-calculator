@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>每日饮食推荐</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="data.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Fira Sans','sans-serif'], mono: ['Fira Code','monospace'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family:'Fira Sans',sans-serif; background:#F8FAFC; overscroll-behavior:none; }
+    .font-data { font-family:'Fira Code',monospace; }
+    .bar-fill { transition:width 0.5s ease-out; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+    .meal-card { animation:fadeIn 0.15s ease-out; }
+  </style>
+</head>
+<body class="min-h-screen pb-20">
+
+  <!-- 顶栏 -->
+  <div id="topBar" class="sticky top-0 z-30 bg-emerald-600 text-white px-4 py-3 flex justify-between items-center shadow">
+    <div>
+      <div class="font-bold text-lg">每日饮食推荐</div>
+      <div class="text-xs opacity-80" id="dateDisplay"></div>
+    </div>
+    <button id="settingsBtn" class="bg-white/20 px-3 py-1.5 rounded-lg text-sm active:bg-white/30">设置</button>
+  </div>
+
+  <!-- 目标进度卡片 -->
+  <div id="targetCard" class="mx-4 mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+    <div class="flex justify-between items-center mb-2">
+      <span class="font-semibold text-emerald-800">今日蛋白质目标</span>
+      <span class="text-xl font-bold text-emerald-600 font-data" id="targetDisplay">120g</span>
+    </div>
+    <div class="bg-emerald-100 rounded-full h-2 overflow-hidden">
+      <div id="progressBar" class="bg-emerald-500 h-full rounded-full bar-fill" style="width:0%"></div>
+    </div>
+    <div class="flex justify-between text-xs text-slate-500 mt-1">
+      <span id="progressText">已选 0g / 120g</span>
+      <span id="totalCost">预估 ¥0</span>
+    </div>
+  </div>
+
+  <!-- 四餐容器 -->
+  <div id="mealsContainer" class="mx-4 mt-3 flex flex-col gap-3"></div>
+
+  <!-- 底部按钮 -->
+  <div class="mx-4 mt-4 pb-4">
+    <button id="regenerateAllBtn" class="w-full bg-emerald-600 text-white py-3.5 rounded-xl text-base font-semibold active:bg-emerald-700">
+      全部重新生成
+    </button>
+  </div>
+
+  <!-- 设置弹窗 -->
+  <div id="settingsModal" class="fixed inset-0 z-40 hidden">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" id="settingsOverlay"></div>
+    <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5 max-h-[80vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-lg">推荐设置</h3>
+        <button id="settingsClose" class="text-slate-400 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-700 mb-1">每日蛋白质目标 (g)</label>
+        <input type="number" id="proteinInput" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-lg font-data" min="50" max="300" value="120">
+      </div>
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-700 mb-2">餐次比例</label>
+        <div id="ratioSliders" class="space-y-3"></div>
+        <div class="text-xs text-slate-400 mt-1 text-right" id="ratioSum">合计 100%</div>
+      </div>
+      <button id="settingsSave" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold active:bg-emerald-700">保存</button>
+    </div>
+  </div>
+
+  <script src="recommend.js"></script>
+</body>
+</html>
