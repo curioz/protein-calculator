@@ -106,30 +106,33 @@
     '乳清蛋白粉(分离)': [25, 35]
   };
 
-  // 实用计量单位：{ unit: 单位名, grams: 每单位克数 }
+  // 实用计量单位：{ unit: 单位名, g: 每单位克数, max: 单餐最大单位数 }
   var PRACTICAL_UNITS = {
-    '鸡蛋':             { unit: '个',  g: 50  },
-    '纯牛奶(普通)':     { unit: '盒',  g: 250 },
-    '纯牛奶(高端)':     { unit: '盒',  g: 250 },
-    '豆浆':             { unit: '杯',  g: 300 },
-    '希腊酸奶':         { unit: '盒',  g: 150 },
-    '奶酪(硬质)':       { unit: '片',  g: 30  },
-    '北豆腐':           { unit: '块',  g: 150 },
-    '豆腐干':           { unit: '块',  g: 50  },
-    '腐竹(干)':         { unit: '根',  g: 30  },
-    '干黄豆':           { unit: '把',  g: 30  },
-    '黑豆(干)':         { unit: '把',  g: 30  },
-    '天贝':             { unit: '块',  g: 100 },
-    '藜麦(干)':         { unit: '份',  g: 50  },
-    '花生(带壳生)':     { unit: '把',  g: 30  },
-    '南瓜子(带壳)':     { unit: '把',  g: 30  },
-    '杏仁(巴旦木)':     { unit: '把',  g: 25  },
-    '混合坚果':         { unit: '包',  g: 25  },
-    '花生酱':           { unit: '勺',  g: 20  },
-    '大豆分离蛋白粉':   { unit: '勺',  g: 30  },
-    '乳清蛋白粉(浓缩)': { unit: '勺',  g: 30  },
-    '乳清蛋白粉(分离)': { unit: '勺',  g: 30  }
+    '鸡蛋':             { unit: '个',  g: 50,  max: 2 },
+    '纯牛奶(普通)':     { unit: '盒',  g: 250, max: 1 },
+    '纯牛奶(高端)':     { unit: '盒',  g: 250, max: 1 },
+    '豆浆':             { unit: '杯',  g: 300, max: 1 },
+    '希腊酸奶':         { unit: '盒',  g: 150, max: 1 },
+    '奶酪(硬质)':       { unit: '片',  g: 30,  max: 2 },
+    '北豆腐':           { unit: '块',  g: 150, max: 1 },
+    '豆腐干':           { unit: '块',  g: 50,  max: 2 },
+    '腐竹(干)':         { unit: '根',  g: 30,  max: 2 },
+    '干黄豆':           { unit: '把',  g: 30,  max: 1 },
+    '黑豆(干)':         { unit: '把',  g: 30,  max: 1 },
+    '天贝':             { unit: '块',  g: 100, max: 1 },
+    '藜麦(干)':         { unit: '份',  g: 50,  max: 1 },
+    '花生(带壳生)':     { unit: '把',  g: 30,  max: 1 },
+    '南瓜子(带壳)':     { unit: '把',  g: 30,  max: 1 },
+    '杏仁(巴旦木)':     { unit: '把',  g: 25,  max: 1 },
+    '混合坚果':         { unit: '包',  g: 25,  max: 1 },
+    '花生酱':           { unit: '勺',  g: 20,  max: 2 },
+    '大豆分离蛋白粉':   { unit: '勺',  g: 30,  max: 1 },
+    '乳清蛋白粉(浓缩)': { unit: '勺',  g: 30,  max: 1 },
+    '乳清蛋白粉(分离)': { unit: '勺',  g: 30,  max: 1 }
   };
+
+  // 肉类默认限制
+  var MEAT_DEFAULT_MAX = 200; // 克，单次最多200g
 
   function getRandomServing(food) {
     var range = SERVING_MAP[food.name];
@@ -186,11 +189,11 @@
   }
 
   function snapToServing(food, grams) {
-    // 优先按实用单位对齐
     var pu = PRACTICAL_UNITS[food.name];
     if (pu) {
       var count = Math.round(grams / pu.g);
-      return Math.max(1, count) * pu.g;
+      count = Math.max(1, Math.min(count, pu.max));
+      return count * pu.g;
     }
     var range = SERVING_MAP[food.name];
     if (range) {
@@ -198,7 +201,8 @@
       if (grams >= range[1]) return range[1];
       return Math.round(grams / 10) * 10;
     }
-    return Math.max(50, Math.round(grams / 50) * 50);
+    // 肉类等：对齐到50的倍数，上限 MEAT_DEFAULT_MAX
+    return Math.min(MEAT_DEFAULT_MAX, Math.max(50, Math.round(grams / 50) * 50));
   }
 
   function selectMeal(targetProtein, foods, usageCounts) {
