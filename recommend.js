@@ -10,7 +10,16 @@
   var MEAL_LABELS = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' };
   var MEAL_ICONS = { breakfast: '🌅', lunch: '☀️', dinner: '🌙', snack: '🍪' };
   var MEAL_COLORS = { breakfast: '#f59e0b', lunch: '#ef4444', dinner: '#6366f1', snack: '#8b5cf6' };
-  var DEFAULT_SETTINGS = { proteinTarget: 120, ratios: [0.25, 0.35, 0.30, 0.10] };
+  var DEFAULT_SETTINGS = {
+    proteinTarget: 120,
+    ratios: [0.25, 0.35, 0.30, 0.10],
+    slotExcludes: {
+      breakfast: ['蛋白粉'],
+      lunch: [],
+      dinner: ['蛋奶'],
+      snack: ['鲜肉', '成品肉']
+    }
+  };
 
   // ========== 设置管理 ==========
   function loadSettings() {
@@ -265,13 +274,21 @@
     };
   }
 
+  /** 根据品类排除列表过滤食材 */
+  function filterByExcludes(foods, excludes) {
+    if (!excludes || excludes.length === 0) return foods;
+    return foods.filter(function(f) { return excludes.indexOf(f.cat) === -1; });
+  }
+
   function generatePlan(foods, settings, history) {
     var usageCounts = getUsageCounts(history);
     var plan = { meals: {} };
+    var excludes = settings.slotExcludes || {};
 
     MEAL_SLOTS.forEach(function(slot, i) {
       var target = settings.proteinTarget * settings.ratios[i];
-      plan.meals[slot] = selectMeal(target, foods, usageCounts);
+      var filtered = filterByExcludes(foods, excludes[slot]);
+      plan.meals[slot] = selectMeal(target, filtered, usageCounts);
     });
 
     return plan;
@@ -280,7 +297,9 @@
   function regenerateSlot(foods, settings, history, slot) {
     var idx = MEAL_SLOTS.indexOf(slot);
     var target = settings.proteinTarget * settings.ratios[idx];
-    return selectMeal(target, foods, getUsageCounts(history));
+    var excludes = settings.slotExcludes || {};
+    var filtered = filterByExcludes(foods, excludes[slot]);
+    return selectMeal(target, filtered, getUsageCounts(history));
   }
 
   // ========== 当日推荐存取 ==========
@@ -449,6 +468,7 @@
   function openSettings() {
     $('proteinInput').value = currentSettings.proteinTarget;
     renderRatioSliders(currentSettings.ratios);
+    renderExcludeChips();
     $('settingsModal').classList.remove('hidden');
   }
 
@@ -519,6 +539,42 @@
     $('ratioSum').textContent = '合计 ' + pct + '%';
     $('ratioSum').className = 'text-xs mt-1 text-right ' +
       (pct === 100 ? 'text-slate-400' : 'text-red-500 font-semibold');
+  }
+
+  function renderExcludeChips() {
+    var categories = window.PROTEIN_DB.categories;
+    var excludes = currentSettings.slotExcludes || {};
+    var labels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐', snack: '🍪 加餐' };
+    var html = '<p class="text-sm font-medium text-slate-700 mb-2">品类限制 <span class="text-xs text-slate-400 font-normal">点击排除/恢复</span></p>';
+
+    MEAL_SLOTS.forEach(function(slot) {
+      var slotEx = excludes[slot] || [];
+      html += '<div class="flex items-center gap-2 mb-2"><span class="text-xs text-slate-500 w-14 shrink-0">' + labels[slot] + '</span><div class="flex flex-wrap gap-1.5">';
+      categories.forEach(function(cat) {
+        var excluded = slotEx.indexOf(cat) !== -1;
+        html += '<button type="button" class="exclude-chip text-xs px-2 py-0.5 rounded-full border ' +
+          (excluded ? 'bg-red-50 border-red-200 text-red-500 line-through' : 'bg-slate-50 border-slate-200 text-slate-600') +
+          '" data-slot="' + slot + '" data-cat="' + cat + '">' + cat + '</button>';
+      });
+      html += '</div></div>';
+    });
+
+    $('excludeSection').innerHTML = html;
+
+    // 绑定点击事件
+    var chips = document.querySelectorAll('.exclude-chip');
+    chips.forEach(function(chip) {
+      chip.addEventListener('click', function() {
+        var slot = this.getAttribute('data-slot');
+        var cat = this.getAttribute('data-cat');
+        if (!currentSettings.slotExcludes) currentSettings.slotExcludes = {};
+        if (!currentSettings.slotExcludes[slot]) currentSettings.slotExcludes[slot] = [];
+        var arr = currentSettings.slotExcludes[slot];
+        var idx = arr.indexOf(cat);
+        if (idx === -1) { arr.push(cat); } else { arr.splice(idx, 1); }
+        renderExcludeChips(); // 重新渲染
+      });
+    });
   }
 
   function saveSettingsAndRegenerate() {
