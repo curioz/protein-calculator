@@ -39,16 +39,37 @@
 
   <!-- 目标进度卡片 -->
   <div id="targetCard" class="mx-4 mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-    <div class="flex justify-between items-center mb-2">
-      <span class="font-semibold text-emerald-800">今日蛋白质目标</span>
-      <span class="text-xl font-bold text-emerald-600 font-data" id="targetDisplay">120g</span>
+    <!-- 蛋白质 -->
+    <div class="flex justify-between items-center mb-1">
+      <span class="text-sm font-semibold text-emerald-800">蛋白质目标</span>
+      <span class="text-lg font-bold text-emerald-600 font-data" id="targetDisplay">120g</span>
     </div>
     <div class="bg-emerald-100 rounded-full h-2 overflow-hidden">
       <div id="progressBar" class="bg-emerald-500 h-full rounded-full bar-fill" style="width:0%"></div>
     </div>
-    <div class="flex justify-between text-xs text-slate-500 mt-1">
-      <span id="progressText">已选 0g / 120g</span>
-      <span id="totalCost">预估 ¥0</span>
+    <div class="text-xs text-slate-500 mt-0.5" id="progressText">已选 0g / 120g</div>
+    <!-- 碳水 -->
+    <div class="flex justify-between items-center mb-1 mt-2">
+      <span class="text-sm font-semibold text-amber-800">碳水目标</span>
+      <span class="text-lg font-bold text-amber-600 font-data" id="carbsTargetDisplay">250g</span>
+    </div>
+    <div class="bg-amber-100 rounded-full h-2 overflow-hidden">
+      <div id="carbsProgressBar" class="bg-amber-500 h-full rounded-full bar-fill" style="width:0%"></div>
+    </div>
+    <div class="text-xs text-slate-500 mt-0.5" id="carbsProgressText">已选 0g / 250g</div>
+    <!-- 热量 -->
+    <div class="flex justify-between items-center mb-1 mt-2">
+      <span class="text-sm font-semibold text-rose-700">热量目标</span>
+      <span class="text-lg font-bold text-rose-600 font-data" id="caloriesTargetDisplay">2000kcal</span>
+    </div>
+    <div class="bg-rose-100 rounded-full h-2 overflow-hidden">
+      <div id="caloriesProgressBar" class="bg-rose-500 h-full rounded-full bar-fill" style="width:0%"></div>
+    </div>
+    <div class="text-xs text-slate-500 mt-0.5" id="caloriesProgressText">已选 0kcal / 2000kcal</div>
+    <!-- 脂肪/纤维概览 -->
+    <div class="flex justify-between items-center mt-2">
+      <span class="text-xs text-slate-500" id="fatFiberDisplay">脂肪 0g · 纤维 0g</span>
+      <span class="text-xs text-slate-500" id="totalCost">预估 ¥0</span>
     </div>
   </div>
 
@@ -70,14 +91,48 @@
         <h3 class="font-bold text-lg">推荐设置</h3>
         <button id="settingsClose" class="text-slate-400 text-2xl leading-none">&times;</button>
       </div>
+      <!-- 场景预设 -->
       <div class="mb-4">
+        <p class="text-sm font-medium text-slate-700 mb-2">快捷场景</p>
+        <div class="flex items-center gap-2 mb-2">
+          <label class="text-sm text-slate-600">体重</label>
+          <input type="number" id="weightInput" class="w-20 border border-slate-300 rounded-lg px-2 py-1 text-sm font-data text-center" min="30" max="200" value="70">
+          <span class="text-sm text-slate-400">kg</span>
+          <label class="text-sm text-slate-600 ml-2">
+            <input type="radio" name="gender" id="genderMale" value="male" checked class="mr-0.5"> 男
+          </label>
+          <label class="text-sm text-slate-600">
+            <input type="radio" name="gender" id="genderFemale" value="female" class="mr-0.5"> 女
+          </label>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" class="preset-btn text-sm px-4 py-2 rounded-lg border-2 font-medium bg-white text-slate-600 border-slate-200" data-preset="muscle">增肌</button>
+          <button type="button" class="preset-btn text-sm px-4 py-2 rounded-lg border-2 font-medium bg-white text-slate-600 border-slate-200" data-preset="cut">减脂</button>
+          <button type="button" class="preset-btn text-sm px-4 py-2 rounded-lg border-2 font-medium bg-white text-slate-600 border-slate-200" data-preset="balance">均衡</button>
+        </div>
+        <p class="text-xs text-slate-400 mt-1">点击场景自动填入目标值，可手动微调</p>
+      </div>
+      <div class="mb-3">
         <label class="block text-sm font-medium text-slate-700 mb-1">每日蛋白质目标 (g)</label>
         <input type="number" id="proteinInput" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-lg font-data" min="50" max="300" value="120">
       </div>
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-slate-700 mb-2">餐次比例</label>
-        <div id="ratioSliders" class="space-y-3"></div>
-        <div class="text-xs text-slate-400 mt-1 text-right" id="ratioSum">合计 100%</div>
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-slate-700 mb-1">每日碳水目标 (g)</label>
+        <input type="number" id="carbsInput" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-lg font-data" min="50" max="500" value="250">
+      </div>
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-slate-700 mb-1">每日热量目标 (kcal)</label>
+        <input type="number" id="caloriesInput" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-lg font-data" min="1000" max="5000" value="2000">
+      </div>
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-emerald-700 mb-2">蛋白质餐次比例</label>
+        <div id="proteinRatioSliders" class="space-y-3"></div>
+        <div class="text-xs text-slate-400 mt-1 text-right" id="proteinRatioSum">合计 100%</div>
+      </div>
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-amber-700 mb-2">碳水餐次比例</label>
+        <div id="carbsRatioSliders" class="space-y-3"></div>
+        <div class="text-xs text-slate-400 mt-1 text-right" id="carbsRatioSum">合计 100%</div>
       </div>
       <div class="mb-4">
         <div id="excludeSection"></div>
