@@ -11,19 +11,30 @@
   var MEAL_ICONS = { breakfast: '🌅', lunch: '☀️', dinner: '🌙', snack: '🍪' };
   var MEAL_COLORS = { breakfast: '#f59e0b', lunch: '#ef4444', dinner: '#6366f1', snack: '#8b5cf6' };
   var CARB_CATEGORIES = ['主食', '水果'];
-  // 预设系数：按体重和性别动态计算
-  // proteinPerKg: 蛋白 g/kg, calPerKg: 热量 kcal/kg(男/女), carbsPct: 碳水供能占比
+  // 活动系数（TDEE = BMR × 活动系数）
+  var ACTIVITY_FACTORS = {
+    sedentary: { label: '久坐', factor: 1.2 },
+    light:     { label: '轻度运动', factor: 1.375 },
+    moderate:  { label: '中度运动', factor: 1.55 },
+    active:    { label: '高强度运动', factor: 1.725 },
+    extreme:   { label: '极高强度', factor: 1.9 }
+  };
+  // 预设：蛋白按体重 → 脂肪按体重 → 碳水填剩余热量
+  // 依据：ISSN protein 1.6-2.2g/kg; ACSM fat 0.7-1.0g/kg; Henselmans 2026 meta-analysis
   var PRESETS = {
-    muscle:  { label: '增肌', proteinPerKg: 2.0, calPerKg: [36, 33], carbsPct: 0.50 },
-    cut:     { label: '减脂', proteinPerKg: 1.2, calPerKg: [25, 23], carbsPct: 0.35 },
-    balance: { label: '均衡', proteinPerKg: 1.4, calPerKg: [30, 28], carbsPct: 0.45 }
+    muscle:  { label: '增肌', proteinPerKg: 2.0, fatPerKg: 1.0, calOffset: 300 },
+    cut:     { label: '减脂', proteinPerKg: 1.8, fatPerKg: 0.7, calOffset: -500 },
+    balance: { label: '均衡', proteinPerKg: 1.4, fatPerKg: 0.8, calOffset: 0 }
   };
   var DEFAULT_SETTINGS = {
     proteinTarget: 120,
     carbsTarget: 250,
     caloriesTarget: 2000,
     bodyWeight: 70,
+    bodyHeight: 170,
+    bodyAge: 30,
     gender: 'male',
+    activity: 'moderate',
     proteinRatios: [0.25, 0.35, 0.30, 0.10],
     carbsRatios:  [0.30, 0.35, 0.25, 0.10],
     slotExcludes: {
@@ -604,6 +615,19 @@
       now.getFullYear() + '/' + (now.getMonth()+1) + '/' + now.getDate() + ' 周' + weekDays[now.getDay()];
   }
 
+  function renderProfileBar(settings) {
+    var w = settings.bodyWeight || 70;
+    var h = settings.bodyHeight || 170;
+    var age = settings.bodyAge || 30;
+    var gender = settings.gender === 'female' ? '女' : '男';
+    var act = (ACTIVITY_FACTORS[settings.activity || 'moderate'] || ACTIVITY_FACTORS.moderate).label;
+    var bmr = Math.round(calcBMR(w, h, age, settings.gender === 'female'));
+    var tdee = Math.round(bmr * ((ACTIVITY_FACTORS[settings.activity || 'moderate'] || ACTIVITY_FACTORS.moderate).factor));
+    $('profileBar').innerHTML =
+      '<b>' + w + 'kg</b> · ' + h + 'cm · ' + age + '岁 · ' + gender + ' · ' + act +
+      ' <span class="text-slate-400">| BMR ' + bmr + ' · TDEE ' + tdee + ' kcal</span>';
+  }
+
   function renderTargetCard(plan, settings) {
     var totalProtein = 0, totalCarbs = 0, totalFat = 0, totalFiber = 0, totalCalories = 0, totalCost = 0;
     MEAL_SLOTS.forEach(function(slot) {
@@ -699,22 +723,43 @@
     renderTargetCard(plan, settings);
   }
 
+  /** Mifflin-St Jeor BMR 计算 */
+  function calcBMR(weight, height, age, isFemale) {
+    // 男: 10×体重 + 6.25×身高 - 5×年龄 + 5
+    // 女: 10×体重 + 6.25×身高 - 5×年龄 - 161
+    return 10 * weight + 6.25 * height - 5 * age + (isFemale ? -161 : 5);
+  }
+
+  /** 从设置中提取身体参数 */
+  function getBodyParams() {
+    var weight = parseFloat($('weightInput').value) || 70;
+    var height = parseFloat($('heightInput').value) || 170;
+    var age = parseInt($('ageInput').value) || 30;
+    var isFemale = $('genderFemale').checked;
+    var activity = $('activitySelect').value || 'moderate';
+    return { weight: weight, height: height, age: age, isFemale: isFemale, activity: activity };
+  }
+
   /** 根据当前设置匹配最接近的预设，返回脂肪参考值 */
   function getFatRef(settings) {
-    var weight = settings.bodyWeight || 70;
-    var genderIdx = (settings.gender === 'female') ? 1 : 0;
     var caloriesTarget = settings.caloriesTarget || 2000;
     // 找最接近的预设
+    var body = {
+      weight: settings.bodyWeight || 70,
+      height: settings.bodyHeight || 170,
+      age: settings.bodyAge || 30,
+      isFemale: settings.gender === 'female',
+      activity: settings.activity || 'moderate'
+    };
     var bestKey = null, bestDiff = Infinity;
     Object.keys(PRESETS).forEach(function(k) {
-      var vals = calcPresetValues(k, weight, genderIdx);
+      var vals = calcPresetValues(k, body);
       if (!vals) return;
       var diff = Math.abs(vals.caloriesTarget - caloriesTarget);
       if (diff < bestDiff) { bestDiff = diff; bestKey = k; }
     });
     if (bestKey && bestDiff <= 300) {
-      var v = calcPresetValues(bestKey, weight, genderIdx);
-      return v.fatRef;
+      return calcPresetValues(bestKey, body).fatRef;
     }
     // 没匹配到预设时按热量估算：脂肪供能占比25-30%
     return Math.round(caloriesTarget * 0.27 / 9);
@@ -730,13 +775,17 @@
     if (!currentSettings.carbsTarget) currentSettings.carbsTarget = DEFAULT_SETTINGS.carbsTarget;
     if (!currentSettings.caloriesTarget) currentSettings.caloriesTarget = DEFAULT_SETTINGS.caloriesTarget;
     if (!currentSettings.bodyWeight) currentSettings.bodyWeight = DEFAULT_SETTINGS.bodyWeight;
+    if (!currentSettings.bodyHeight) currentSettings.bodyHeight = DEFAULT_SETTINGS.bodyHeight;
+    if (!currentSettings.bodyAge) currentSettings.bodyAge = DEFAULT_SETTINGS.bodyAge;
     if (!currentSettings.gender) currentSettings.gender = DEFAULT_SETTINGS.gender;
+    if (!currentSettings.activity) currentSettings.activity = DEFAULT_SETTINGS.activity;
     if (!currentSettings.carbsRatios) currentSettings.carbsRatios = DEFAULT_SETTINGS.carbsRatios.slice();
     if (!currentSettings.proteinRatios) {
       // 旧版用 ratios 字段，迁移到 proteinRatios
       currentSettings.proteinRatios = currentSettings.ratios || DEFAULT_SETTINGS.proteinRatios.slice();
     }
     renderDate();
+    renderProfileBar(currentSettings);
 
     // 尝试加载今日已有推荐
     currentPlan = loadToday();
@@ -815,11 +864,14 @@
     $('carbsInput').value = currentSettings.carbsTarget || 250;
     $('caloriesInput').value = currentSettings.caloriesTarget || 2000;
     $('weightInput').value = currentSettings.bodyWeight || 70;
+    $('heightInput').value = currentSettings.bodyHeight || 170;
+    $('ageInput').value = currentSettings.bodyAge || 30;
     if (currentSettings.gender === 'female') {
       $('genderFemale').checked = true;
     } else {
       $('genderMale').checked = true;
     }
+    $('activitySelect').value = currentSettings.activity || 'moderate';
     highlightPreset();
     renderRatioSliders('protein', currentSettings.proteinRatios);
     renderRatioSliders('carbs', currentSettings.carbsRatios);
@@ -832,12 +884,11 @@
   }
 
   function highlightPreset() {
-    var weight = parseFloat($('weightInput').value) || 70;
-    var genderIdx = $('genderMale').checked ? 0 : 1;
+    var body = getBodyParams();
     var btns = document.querySelectorAll('.preset-btn');
     btns.forEach(function(btn) {
       var key = btn.getAttribute('data-preset');
-      var vals = calcPresetValues(key, weight, genderIdx);
+      var vals = calcPresetValues(key, body);
       var active = vals &&
         parseInt($('proteinInput').value) === vals.proteinTarget &&
         parseInt($('carbsInput').value) === vals.carbsTarget &&
@@ -847,20 +898,26 @@
     });
   }
 
-  function calcPresetValues(key, weight, genderIdx) {
+  function calcPresetValues(key, body) {
     var p = PRESETS[key];
     if (!p) return null;
-    var proteinTarget = Math.round(weight * p.proteinPerKg / 5) * 5; // 取整到5
-    var caloriesTarget = Math.round(weight * p.calPerKg[genderIdx] / 50) * 50; // 取整到50
-    var carbsTarget = Math.round(caloriesTarget * p.carbsPct / 4 / 10) * 10; // 取整到10
-    var fatRef = Math.round((caloriesTarget - proteinTarget * 4 - carbsTarget * 4) / 9);
-    return { proteinTarget: proteinTarget, carbsTarget: carbsTarget, caloriesTarget: caloriesTarget, fatRef: fatRef };
+    var bmr = calcBMR(body.weight, body.height, body.age, body.isFemale);
+    var actFactor = (ACTIVITY_FACTORS[body.activity] || ACTIVITY_FACTORS.moderate).factor;
+    var tdee = Math.round(bmr * actFactor / 50) * 50;
+    var caloriesTarget = Math.max(1200, tdee + p.calOffset);
+    caloriesTarget = Math.round(caloriesTarget / 50) * 50;
+    // 1. 蛋白 = 体重 × g/kg
+    var proteinTarget = Math.round(body.weight * p.proteinPerKg / 5) * 5;
+    // 2. 脂肪 = 体重 × g/kg
+    var fatTarget = Math.round(body.weight * p.fatPerKg);
+    // 3. 碳水 = (总热量 - 蛋白热量 - 脂肪热量) / 4
+    var carbsTarget = Math.max(50, Math.round((caloriesTarget - proteinTarget * 4 - fatTarget * 9) / 4 / 10) * 10);
+    return { proteinTarget: proteinTarget, carbsTarget: carbsTarget, caloriesTarget: caloriesTarget, fatRef: fatTarget };
   }
 
   function applyPreset(key) {
-    var weight = parseFloat($('weightInput').value) || 70;
-    var genderIdx = $('genderMale').checked ? 0 : 1;
-    var vals = calcPresetValues(key, weight, genderIdx);
+    var body = getBodyParams();
+    var vals = calcPresetValues(key, body);
     if (!vals) return;
     $('proteinInput').value = vals.proteinTarget;
     $('carbsInput').value = vals.carbsTarget;
@@ -869,11 +926,14 @@
     currentSettings.proteinTarget = vals.proteinTarget;
     currentSettings.carbsTarget = vals.carbsTarget;
     currentSettings.caloriesTarget = vals.caloriesTarget;
-    var bodyWeight = parseFloat($('weightInput').value);
-    if (bodyWeight >= 30 && bodyWeight <= 200) currentSettings.bodyWeight = bodyWeight;
-    currentSettings.gender = $('genderFemale').checked ? 'female' : 'male';
+    currentSettings.bodyWeight = body.weight;
+    currentSettings.bodyHeight = body.height;
+    currentSettings.bodyAge = body.age;
+    currentSettings.gender = body.isFemale ? 'female' : 'male';
+    currentSettings.activity = body.activity;
     saveSettings(currentSettings);
     closeSettings();
+    renderProfileBar(currentSettings);
     generateAndRender();
   }
 
@@ -993,9 +1053,13 @@
     if (bodyWeight >= 30 && bodyWeight <= 200) {
       currentSettings.bodyWeight = bodyWeight;
     }
+    currentSettings.bodyHeight = parseFloat($('heightInput').value) || 170;
+    currentSettings.bodyAge = parseInt($('ageInput').value) || 30;
     currentSettings.gender = $('genderFemale').checked ? 'female' : 'male';
+    currentSettings.activity = $('activitySelect').value || 'moderate';
     saveSettings(currentSettings);
     closeSettings();
+    renderProfileBar(currentSettings);
     generateAndRender();
   }
 
