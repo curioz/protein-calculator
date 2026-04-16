@@ -4,28 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>蛋白质成本计算器</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="tailwind.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="data.js"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: { sans: ['Fira Sans','sans-serif'], mono: ['Fira Code','monospace'] },
-          colors: {
-            primary: { 50:'#EFF6FF',100:'#DBEAFE',200:'#BFDBFE',300:'#93C5FD',400:'#60A5FA',500:'#3B82F6',600:'#2563EB',700:'#1D4ED8',800:'#1E40AF',900:'#1E3A8A' },
-            accent: { 400:'#FBBF24',500:'#F59E0B',600:'#D97706' }
-          }
-        }
-      }
-    }
-  </script>
   <style>
     * { -webkit-tap-highlight-color: transparent; }
-    body { font-family:'Fira Sans',sans-serif; background:#F8FAFC; color:#1E3A8A; overscroll-behavior:none; }
-    .font-data { font-family:'Fira Code',monospace; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif; background:#F8FAFC; color:#1E3A8A; overscroll-behavior:none; }
+    .font-data { font-family:"SF Mono",Menlo,Consolas,"Noto Sans Mono",monospace; }
     .bar-fill { transition:width 0.5s ease-out; }
     .card { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.06); border:1px solid #E2E8F0; }
     .tab-active { color:#1E40AF; }
@@ -561,8 +546,8 @@
           indexAxis: 'y', responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '¥' + ctx.raw.toFixed(1) } } },
           scales: {
-            x: { grid: { color: '#F1F5F9' }, ticks: { font: { family:'Fira Code', size:10 } } },
-            y: { grid: { display: false }, ticks: { font: { family:'Fira Sans', size:10 } } }
+            x: { grid: { color: '#F1F5F9' }, ticks: { font: { family:'"SF Mono",Menlo,Consolas,monospace', size:10 } } },
+            y: { grid: { display: false }, ticks: { font: { family:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', size:10 } } }
           }
         }
       });
@@ -585,7 +570,7 @@
         return;
       }
       const opts = (label) => ({ responsive:true, maintainAspectRatio:false, cutout:'50%',
-        plugins: { legend: { position:'bottom', labels: { font:{ family:'Fira Sans', size:10 }, padding:8, usePointStyle:true, pointStyleWidth:6 } },
+        plugins: { legend: { position:'bottom', labels: { font:{ family:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif', size:10 }, padding:8, usePointStyle:true, pointStyleWidth:6 } },
           tooltip: { callbacks: { label: ctx => ctx.label+': '+ctx.raw.toFixed(1)+label } } } });
       if (catProteinChart) catProteinChart.destroy();
       catProteinChart = new Chart(document.getElementById('catProteinChart').getContext('2d'), {

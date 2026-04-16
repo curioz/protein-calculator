@@ -10,7 +10,48 @@
   var MEAL_LABELS = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '加餐' };
   var MEAL_ICONS = { breakfast: '🌅', lunch: '☀️', dinner: '🌙', snack: '🍪' };
   var MEAL_COLORS = { breakfast: '#f59e0b', lunch: '#ef4444', dinner: '#6366f1', snack: '#8b5cf6' };
-  var CARB_CATEGORIES = ['主食', '水果'];
+  var CARB_CATEGORIES = ['主食', '水果', '蔬菜'];
+  // 餐次默认权重 [早餐, 午餐, 晚餐, 加餐]，按品类
+  var MEAL_WEIGHT_DEFAULTS = {
+    '鲜肉':   [2, 8, 8, 3],
+    '成品肉': [4, 5, 4, 8],
+    '蛋奶':   [9, 4, 3, 7],
+    '豆类':   [3, 6, 6, 3],
+    '蛋白粉': [5, 2, 2, 7],
+    '干果':   [3, 3, 2, 7],
+    '主食':   [6, 7, 6, 4],
+    '蔬菜':   [3, 8, 8, 4],
+    '水果':   [5, 5, 4, 7]
+  };
+  // 个别食材覆盖（与品类默认差异大的）
+  var MEAL_WEIGHT_OVERRIDES = {
+    '白米饭':           [2, 10, 9, 1],
+    '面条(熟)':         [4, 10, 8, 2],
+    '红薯':             [6, 6, 5, 8],
+    '燕麦(干)':         [10, 3, 2, 7],
+    '全麦面包':         [9, 4, 3, 8],
+    '馒头':             [9, 6, 5, 3],
+    '玉米':             [5, 5, 5, 7],
+    '小米粥(熟)':       [9, 3, 4, 5],
+    '紫薯':             [5, 5, 5, 7],
+    '鸡蛋':             [10, 7, 4, 5],
+    '希腊酸奶':         [7, 3, 2, 9],
+    '豆浆':             [10, 2, 1, 5],
+    '豆腐干':           [3, 7, 6, 6],
+    '金枪鱼罐头(水浸)': [4, 4, 3, 6],
+    '鸡翅中(冷冻)':     [1, 5, 5, 6],
+    '牛肉干':           [3, 3, 2, 8],
+    '黄瓜':             [3, 7, 7, 7],
+    '紫菜(干)':         [5, 4, 4, 4],
+    '香蕉':             [8, 6, 4, 9]
+  };
+  /** 获取食材在某餐的综合权重 = 基础偏好 × 餐次适配 */
+  function getMealWeight(food, slot) {
+    var idx = MEAL_SLOTS.indexOf(slot);
+    var catDefault = MEAL_WEIGHT_DEFAULTS[food.cat] || [5, 5, 5, 5];
+    var mealW = (MEAL_WEIGHT_OVERRIDES[food.name] || catDefault)[idx];
+    return (food.weight || 5) * (mealW || 5);
+  }
   // 活动系数（TDEE = BMR × 活动系数）
   var ACTIVITY_FACTORS = {
     sedentary: { label: '久坐', factor: 1.2 },
@@ -43,7 +84,8 @@
       dinner: ['蛋奶', '蛋白粉'],
       snack: ['鲜肉', '主食', '豆类', '成品肉']
     },
-    cookingOil: { breakfast: 0, lunch: 10, dinner: 10, snack: 0 }
+    cookingOil: { breakfast: 0, lunch: 10, dinner: 10, snack: 0 },
+    veggieSlots: ['breakfast', 'lunch', 'dinner']
   };
 
   // ========== 设置管理 ==========
@@ -105,89 +147,13 @@
     return counts;
   }
 
-  // ========== 食用量映射 ==========
-  var SERVING_MAP = {
-    '鸡蛋':           [1, 2],
-    '纯牛奶(普通)':   [250, 300],
-    '纯牛奶(高端)':   [250, 300],
-    '豆浆':           [250, 300],
-    '干黄豆':         [30, 50],
-    '黑豆(干)':       [30, 50],
-    '腐竹(干)':       [30, 50],
-    '北豆腐':         [100, 150],
-    '豆腐干':         [50, 100],
-    '天贝':           [80, 120],
-    '藜麦(干)':       [50, 80],
-    '花生(带壳生)':   [25, 40],
-    '南瓜子(带壳)':   [25, 40],
-    '杏仁(巴旦木)':   [25, 40],
-    '混合坚果':       [25, 40],
-    '花生酱':         [20, 30],
-    '希腊酸奶':       [150, 200],
-    '奶酪(硬质)':     [30, 50],
-    '大豆分离蛋白粉': [25, 35],
-    '乳清蛋白粉(浓缩)': [25, 35],
-    '乳清蛋白粉(分离)': [25, 35],
-    // 主食
-    '白米饭':         [150, 300],
-    '面条(熟)':       [150, 300],
-    '红薯':           [100, 250],
-    '土豆':           [100, 200],
-    '燕麦(干)':       [30, 60],
-    '全麦面包':       [50, 100],
-    '馒头':           [50, 150],
-    '玉米':           [100, 200],
-    // 水果
-    '香蕉':           [100, 200],
-    '苹果':           [150, 250],
-    '葡萄':           [100, 200],
-    '橙子':           [150, 250]
-  };
-
-  // 实用计量单位：{ unit: 单位名, g: 每单位克数, max: 单餐最大单位数 }
-  var PRACTICAL_UNITS = {
-    '鸡蛋':             { unit: '个',  g: 50,  max: 2 },
-    '纯牛奶(普通)':     { unit: '盒',  g: 250, max: 1 },
-    '纯牛奶(高端)':     { unit: '盒',  g: 250, max: 1 },
-    '豆浆':             { unit: '杯',  g: 300, max: 1 },
-    '希腊酸奶':         { unit: '盒',  g: 150, max: 1 },
-    '奶酪(硬质)':       { unit: '片',  g: 30,  max: 2 },
-    '北豆腐':           { unit: '块',  g: 150, max: 1 },
-    '豆腐干':           { unit: '块',  g: 50,  max: 2 },
-    '腐竹(干)':         { unit: '根',  g: 30,  max: 2 },
-    '干黄豆':           { unit: '把',  g: 30,  max: 1 },
-    '黑豆(干)':         { unit: '把',  g: 30,  max: 1 },
-    '天贝':             { unit: '块',  g: 100, max: 1 },
-    '藜麦(干)':         { unit: '份',  g: 50,  max: 1 },
-    '花生(带壳生)':     { unit: '把',  g: 30,  max: 1 },
-    '南瓜子(带壳)':     { unit: '把',  g: 30,  max: 1 },
-    '杏仁(巴旦木)':     { unit: '把',  g: 25,  max: 1 },
-    '混合坚果':         { unit: '包',  g: 25,  max: 1 },
-    '花生酱':           { unit: '勺',  g: 20,  max: 2 },
-    '大豆分离蛋白粉':   { unit: '勺',  g: 20,  max: 2 },
-    '乳清蛋白粉(浓缩)': { unit: '勺',  g: 20,  max: 2 },
-    '乳清蛋白粉(分离)': { unit: '勺',  g: 20,  max: 2 },
-    // 主食
-    '白米饭':           { unit: '碗',  g: 200, max: 2 },
-    '面条(熟)':         { unit: '碗',  g: 200, max: 2 },
-    '红薯':             { unit: '个',  g: 150, max: 2 },
-    '土豆':             { unit: '个',  g: 150, max: 2 },
-    '燕麦(干)':         { unit: '份',  g: 40,  max: 2 },
-    '全麦面包':         { unit: '片',  g: 40,  max: 3 },
-    '馒头':             { unit: '个',  g: 75,  max: 2 },
-    '玉米':             { unit: '根',  g: 200, max: 1 },
-    // 水果
-    '香蕉':             { unit: '根',  g: 120, max: 2 },
-    '苹果':             { unit: '个',  g: 200, max: 1 },
-    '葡萄':             { unit: '串',  g: 150, max: 1 },
-    '橙子':             { unit: '个',  g: 200, max: 2 }
-  };
+  // ========== 食用量映射（从 data.js 食物记录的 serving/servingUnit 字段读取） ==========
 
   // 肉类默认限制
   var MEAT_DEFAULT_MAX = 200; // 克，单次最多200g
 
   function getRandomServing(food) {
-    var range = SERVING_MAP[food.name];
+    var range = food.serving;
     if (!range) {
       return Math.random() < 0.5 ? 100 : 150;
     }
@@ -199,7 +165,7 @@
   }
 
   function formatAmount(food, grams) {
-    var pu = PRACTICAL_UNITS[food.name];
+    var pu = food.servingUnit;
     if (pu) {
       var count = Math.round(grams / pu.g);
       count = Math.max(1, count);
@@ -223,14 +189,15 @@
     return foods[foods.length - 1];
   }
 
-  function computeWeights(foods, usageCounts, mode) {
+  function computeWeights(foods, usageCounts, mode, slot) {
     return foods.map(function(food) {
       var key = mode === 'carbs' ? food.carbs : food.protein;
       var perYuan = (key / food.price) * 1000;
       var baseWeight = Math.max(perYuan, 0.1);
+      var mw = slot ? getMealWeight(food, slot) : (food.weight || 5);
       var usedCount = usageCounts[food.name] || 0;
       var decay = Math.pow(0.3, usedCount);
-      return baseWeight * decay;
+      return baseWeight * mw * decay;
     });
   }
 
@@ -250,14 +217,14 @@
    * @param {boolean} allowBelow - 是否允许低于1个单位（避免小目标超标）
    */
   function snapToServing(food, grams, allowBelow) {
-    var pu = PRACTICAL_UNITS[food.name];
+    var pu = food.servingUnit;
     if (pu) {
       var count = Math.round(grams / pu.g);
       if (allowBelow && count < 1) count = 1;
       count = Math.max(1, Math.min(count, pu.max));
       return count * pu.g;
     }
-    var range = SERVING_MAP[food.name];
+    var range = food.serving;
     if (range) {
       if (grams <= range[0]) return range[0];
       if (grams >= range[1]) return range[1];
@@ -290,7 +257,7 @@
   }
 
   /** 选蛋白质食材（非碳水品类） */
-  function selectProteinItems(targetProtein, foods, usageCounts) {
+  function selectProteinItems(targetProtein, foods, usageCounts, slot) {
     var proteinFoods = foods.filter(function(f) { return !isCarbFood(f); });
     if (proteinFoods.length === 0) return { items: [], totalProtein: 0, totalCarbs: 0, totalFat: 0, totalFiber: 0, totalCalories: 0, totalCost: 0 };
 
@@ -302,8 +269,7 @@
     var bestScore = Infinity;
 
     for (var retry = 0; retry < maxRetries; retry++) {
-      var weights = computeWeights(proteinFoods, usageCounts, 'protein');
-      var items = [];
+      var weights = computeWeights(proteinFoods, usageCounts, 'protein', slot);
       var totalProtein = 0, totalCarbs = 0, totalFat = 0, totalFiber = 0, totalCalories = 0, totalCost = 0;
       var selectedNames = {};
 
@@ -345,7 +311,7 @@
         });
         if (validAux.length === 0) break;
 
-        var auxWeights = computeWeights(validAux, usageCounts, 'protein');
+        var auxWeights = computeWeights(validAux, usageCounts, 'protein', slot);
         var aux = weightedRandom(validAux, auxWeights);
 
         var auxTarget = remaining * (0.7 + Math.random() * 0.2);
@@ -423,15 +389,15 @@
 
   /** 获取食物的最小实用份量（克） */
   function getMinServing(food) {
-    var pu = PRACTICAL_UNITS[food.name];
+    var pu = food.servingUnit;
     if (pu) return pu.g;
-    var range = SERVING_MAP[food.name];
+    var range = food.serving;
     if (range) return range[0];
     return 50;
   }
 
   /** 选碳水食材（主食/水果） */
-  function selectCarbItems(targetCarbs, foods, usageCounts) {
+  function selectCarbItems(targetCarbs, foods, usageCounts, slot) {
     var carbFoods = foods.filter(function(f) { return isCarbFood(f); });
     if (carbFoods.length === 0) return { items: [], totalProtein: 0, totalCarbs: 0, totalFat: 0, totalFiber: 0, totalCalories: 0, totalCost: 0 };
 
@@ -444,7 +410,7 @@
     var bestScore = Infinity;
 
     for (var retry = 0; retry < maxRetries; retry++) {
-      var weights = computeWeights(carbFoods, usageCounts, 'carbs');
+      var weights = computeWeights(carbFoods, usageCounts, 'carbs', slot);
       var items = [];
       var totalProtein = 0, totalCarbs = 0, totalFat = 0, totalFiber = 0, totalCalories = 0, totalCost = 0;
 
@@ -474,7 +440,7 @@
         if (remaining > targetCarbs * 0.1 && totalCarbs < targetCarbs * 0.95) {
           var auxCarbFoods = carbFoods.filter(function(f) { return f.name !== mainCarb.name; });
           if (auxCarbFoods.length > 0) {
-            var auxWeights = computeWeights(auxCarbFoods, usageCounts, 'carbs');
+            var auxWeights = computeWeights(auxCarbFoods, usageCounts, 'carbs', slot);
             var auxCarb = weightedRandom(auxCarbFoods, auxWeights);
             var auxGramsEstimate = remaining / auxCarb.carbs * 100;
             var auxGrams = snapToServing(auxCarb, auxGramsEstimate);
@@ -541,6 +507,55 @@
 
   var EMPTY_RESULT = { items: [], totalProtein: 0, totalCarbs: 0, totalFat: 0, totalFiber: 0, totalCalories: 0, totalCost: 0 };
 
+  /** 热量超标时从碳水食物中削减份量 */
+  function trimCalories(meal, calorieBudget) {
+    if (!calorieBudget || meal.totalCalories <= calorieBudget) return meal;
+    var excess = meal.totalCalories - calorieBudget;
+    // 从后往前找碳水食物削减
+    for (var i = meal.items.length - 1; i >= 0 && excess > 0; i--) {
+      var item = meal.items[i];
+      if (!isCarbFoodByName(item.name)) continue;
+      // 该碳水食物能削减的最大热量（保留至少一半）
+      var maxCut = Math.floor(item.calories * 0.3);
+      if (maxCut <= 0) continue;
+      var cut = Math.min(excess, maxCut);
+      // 按热量比例削减克数
+      var ratio = (item.calories - cut) / item.calories;
+      var newGrams = Math.max(10, Math.round(item.grams * ratio));
+      // 重算该食物营养
+      var food = findFoodByName(item.name);
+      if (!food) continue;
+      var newNut = calcNutrition(food, newGrams);
+      // 更新差值
+      var dCal = item.calories - newNut.calories;
+      meal.totalCalories -= dCal;
+      meal.totalProtein = +(meal.totalProtein - (item.protein - newNut.protein)).toFixed(1);
+      meal.totalCarbs = +(meal.totalCarbs - (item.carbs - newNut.carbs)).toFixed(1);
+      meal.totalFat = +(meal.totalFat - (item.fat - newNut.fat)).toFixed(1);
+      meal.totalFiber = +(meal.totalFiber - (item.fiber - newNut.fiber)).toFixed(1);
+      // 更新 item
+      item.grams = newGrams;
+      item.amount = formatAmount(food, newGrams);
+      item.protein = newNut.protein;
+      item.carbs = newNut.carbs;
+      item.fat = newNut.fat;
+      item.fiber = newNut.fiber;
+      item.calories = newNut.calories;
+      item.cost = newNut.cost;
+      excess -= dCal;
+    }
+    return meal;
+  }
+
+  /** 按名称查找食物数据 */
+  function findFoodByName(name) {
+    var foods = window.PROTEIN_DB.foods;
+    for (var i = 0; i < foods.length; i++) {
+      if (foods[i].name === name) return foods[i];
+    }
+    return null;
+  }
+
   /** 为含蛋白菜品的餐附加烹调油 */
   function addCookingOil(meal, oilGrams) {
     if (!oilGrams || oilGrams <= 0) return meal;
@@ -558,13 +573,57 @@
     return meal;
   }
 
-  function selectMeal(targetProtein, targetCarbs, foods, usageCounts, oilGrams) {
+  var VEGGIE_CAT = '蔬菜';
+
+  /** 判断食物是否为蔬菜 */
+  function isVeggie(food) {
+    return food.cat === VEGGIE_CAT;
+  }
+
+  /** 为缺少蔬菜的餐补一个蔬菜 */
+  function ensureVeggie(meal, foods, usageCounts, needVeggie, slot) {
+    if (!needVeggie) return meal;
+    var hasVeggie = meal.items.some(function(item) {
+      var f = findFoodByName(item.name);
+      return f && isVeggie(f);
+    });
+    if (hasVeggie) return meal;
+    var vegFoods = foods.filter(function(f) { return isVeggie(f); });
+    if (vegFoods.length === 0) return meal;
+    // 按性价比×餐次权重随机选一个蔬菜
+    var weights = vegFoods.map(function(f) {
+      var perYuan = (f.fiber / f.price) * 1000;
+      var mw = slot ? getMealWeight(f, slot) : (f.weight || 5);
+      var usedCount = usageCounts[f.name] || 0;
+      return Math.max(perYuan, 0.1) * mw * Math.pow(0.3, usedCount);
+    });
+    var veg = weightedRandom(vegFoods, weights);
+    var grams = snapToServing(veg, getRandomServing(veg));
+    var nut = calcNutrition(veg, grams);
+    meal.items.push({
+      name: veg.name, amount: formatAmount(veg, grams), grams: grams,
+      protein: nut.protein, carbs: nut.carbs, fat: nut.fat, fiber: nut.fiber,
+      calories: nut.calories, cost: nut.cost
+    });
+    meal.totalProtein = +(meal.totalProtein + nut.protein).toFixed(1);
+    meal.totalCarbs = +(meal.totalCarbs + nut.carbs).toFixed(1);
+    meal.totalFat = +(meal.totalFat + nut.fat).toFixed(1);
+    meal.totalFiber = +(meal.totalFiber + nut.fiber).toFixed(1);
+    meal.totalCalories = meal.totalCalories + nut.calories;
+    meal.totalCost = +(meal.totalCost + nut.cost).toFixed(1);
+    return meal;
+  }
+
+  function selectMeal(targetProtein, targetCarbs, foods, usageCounts, oilGrams, calorieBudget, needVeggie, slot) {
+    // 预留蔬菜碳水（ensureVeggie 在选碳水之后添加，需提前扣除以免超标）
+    var veggieCarbEst = needVeggie ? 5 : 0;
+    var effectiveCarbsTarget = Math.max(10, targetCarbs - veggieCarbEst);
     // 先选碳水，以便知道碳水食物贡献了多少蛋白质
-    var carbResult = selectCarbItems(targetCarbs, foods, usageCounts) || EMPTY_RESULT;
+    var carbResult = selectCarbItems(effectiveCarbsTarget, foods, usageCounts, slot) || EMPTY_RESULT;
     // 从蛋白目标中扣除碳水食物的蛋白贡献（不低于目标的40%）
     var carbProtein = carbResult.totalProtein;
     var adjustedProteinTarget = Math.max(targetProtein * 0.4, targetProtein - carbProtein);
-    var proteinResult = selectProteinItems(adjustedProteinTarget, foods, usageCounts) || EMPTY_RESULT;
+    var proteinResult = selectProteinItems(adjustedProteinTarget, foods, usageCounts, slot) || EMPTY_RESULT;
 
     var allItems = proteinResult.items.concat(carbResult.items);
     var meal = {
@@ -576,7 +635,12 @@
       totalCalories: (proteinResult.totalCalories || 0) + (carbResult.totalCalories || 0),
       totalCost: +(proteinResult.totalCost + carbResult.totalCost).toFixed(1)
     };
+    ensureVeggie(meal, foods, usageCounts, needVeggie, slot);
     addCookingOil(meal, oilGrams || 0);
+    // 碳水是热量平衡器，不应被热量预算二次削减
+    // 仅在严重超标（>15%）时作为安全网削减碳水
+    var safetyBudget = Math.round((calorieBudget || 0) * 1.15);
+    trimCalories(meal, safetyBudget);
     return meal;
   }
 
@@ -587,12 +651,18 @@
     var pRatios = settings.proteinRatios || settings.ratios || DEFAULT_SETTINGS.proteinRatios;
     var cRatios = settings.carbsRatios || DEFAULT_SETTINGS.carbsRatios;
     var oil = settings.cookingOil || DEFAULT_SETTINGS.cookingOil;
+    var calTarget = settings.caloriesTarget || DEFAULT_SETTINGS.caloriesTarget;
+    var vegSlots = settings.veggieSlots || DEFAULT_SETTINGS.veggieSlots;
+    // 热量按蛋白+碳水的餐次比例加权平均分配
+    var calRatios = pRatios.map(function(p, i) { return (p + cRatios[i]) / 2; });
 
     MEAL_SLOTS.forEach(function(slot, i) {
       var proteinTarget = settings.proteinTarget * pRatios[i];
       var carbsTarget = (settings.carbsTarget || 250) * cRatios[i];
+      var calBudget = Math.round(calTarget * calRatios[i]);
+      var needVeggie = vegSlots.indexOf(slot) !== -1;
       var filtered = filterByExcludes(foods, excludes[slot]);
-      plan.meals[slot] = selectMeal(proteinTarget, carbsTarget, filtered, usageCounts, oil[slot] || 0);
+      plan.meals[slot] = selectMeal(proteinTarget, carbsTarget, filtered, usageCounts, oil[slot] || 0, calBudget, needVeggie, slot);
     });
 
     return plan;
@@ -604,10 +674,15 @@
     var cRatios = settings.carbsRatios || DEFAULT_SETTINGS.carbsRatios;
     var proteinTarget = settings.proteinTarget * pRatios[idx];
     var carbsTarget = (settings.carbsTarget || 250) * cRatios[idx];
+    var calTarget = settings.caloriesTarget || DEFAULT_SETTINGS.caloriesTarget;
+    var calRatio = (pRatios[idx] + cRatios[idx]) / 2;
+    var calBudget = Math.round(calTarget * calRatio);
+    var vegSlots = settings.veggieSlots || DEFAULT_SETTINGS.veggieSlots;
+    var needVeggie = vegSlots.indexOf(slot) !== -1;
     var excludes = settings.slotExcludes || {};
     var oil = settings.cookingOil || DEFAULT_SETTINGS.cookingOil;
     var filtered = filterByExcludes(foods, excludes[slot]);
-    return selectMeal(proteinTarget, carbsTarget, filtered, getUsageCounts(history), oil[slot] || 0);
+    return selectMeal(proteinTarget, carbsTarget, filtered, getUsageCounts(history), oil[slot] || 0, calBudget, needVeggie, slot);
   }
 
   // ========== 当日推荐存取 ==========
@@ -645,8 +720,15 @@
     var act = (ACTIVITY_FACTORS[settings.activity || 'moderate'] || ACTIVITY_FACTORS.moderate).label;
     var bmr = Math.round(calcBMR(w, h, age, settings.gender === 'female'));
     var tdee = Math.round(bmr * ((ACTIVITY_FACTORS[settings.activity || 'moderate'] || ACTIVITY_FACTORS.moderate).factor));
+    var presetTag = '';
+    if (settings.activePreset && PRESETS[settings.activePreset]) {
+      var presetColors = { muscle: 'bg-orange-100 text-orange-700', cut: 'bg-blue-100 text-blue-700', balance: 'bg-emerald-100 text-emerald-700' };
+      presetTag = ' <span class="inline-block px-1.5 py-0.5 rounded text-xs font-semibold ' +
+        (presetColors[settings.activePreset] || 'bg-slate-100 text-slate-600') + '">' +
+        PRESETS[settings.activePreset].label + '</span>';
+    }
     $('profileBar').innerHTML =
-      '<b>' + w + 'kg</b> · ' + h + 'cm · ' + age + '岁 · ' + gender + ' · ' + act +
+      presetTag + ' <b>' + w + 'kg</b> · ' + h + 'cm · ' + age + '岁 · ' + gender + ' · ' + act +
       ' <span class="text-slate-400">| BMR ' + bmr + ' · TDEE ' + tdee + ' kcal</span>';
   }
 
@@ -804,6 +886,7 @@
     if (!currentSettings.gender) currentSettings.gender = DEFAULT_SETTINGS.gender;
     if (!currentSettings.activity) currentSettings.activity = DEFAULT_SETTINGS.activity;
     if (!currentSettings.cookingOil) currentSettings.cookingOil = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.cookingOil));
+    if (!currentSettings.veggieSlots) currentSettings.veggieSlots = DEFAULT_SETTINGS.veggieSlots.slice();
     if (!currentSettings.carbsRatios) currentSettings.carbsRatios = DEFAULT_SETTINGS.carbsRatios.slice();
     if (!currentSettings.proteinRatios) {
       // 旧版用 ratios 字段，迁移到 proteinRatios
@@ -957,6 +1040,7 @@
     currentSettings.bodyAge = body.age;
     currentSettings.gender = body.isFemale ? 'female' : 'male';
     currentSettings.activity = body.activity;
+    currentSettings.activePreset = key;
     saveSettings(currentSettings);
     closeSettings();
     renderProfileBar(currentSettings);
@@ -1110,6 +1194,16 @@
     currentSettings.bodyAge = parseInt($('ageInput').value) || 30;
     currentSettings.gender = $('genderFemale').checked ? 'female' : 'male';
     currentSettings.activity = $('activitySelect').value || 'moderate';
+    // 检测是否仍匹配某预设
+    var body = { weight: currentSettings.bodyWeight, height: currentSettings.bodyHeight, age: currentSettings.bodyAge, isFemale: currentSettings.gender === 'female', activity: currentSettings.activity };
+    var matched = null;
+    Object.keys(PRESETS).forEach(function(k) {
+      var v = calcPresetValues(k, body);
+      if (v && v.proteinTarget === currentSettings.proteinTarget && v.carbsTarget === currentSettings.carbsTarget && v.caloriesTarget === currentSettings.caloriesTarget) {
+        matched = k;
+      }
+    });
+    currentSettings.activePreset = matched;
     saveSettings(currentSettings);
     closeSettings();
     renderProfileBar(currentSettings);

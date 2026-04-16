@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>食材信息表</title>
+  <link rel="stylesheet" href="tailwind.css">
+  <script src="data.js"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif; background:#F8FAFC; }
+    .font-data { font-family:"SF Mono",Menlo,Consolas,"Noto Sans Mono",monospace; }
+    .meal-dot { display:inline-block; width:18px; height:18px; border-radius:50%; font-size:10px; line-height:18px; text-align:center; color:#fff; font-weight:600; }
+    .meal-dot.low   { background:#cbd5e1; color:#64748b; }
+    .meal-dot.mid   { background:#93c5fd; color:#1e40af; }
+    .meal-dot.high  { background:#34d399; color:#065f46; }
+    .meal-dot.top   { background:#f59e0b; color:#fff; }
+    .sort-btn { cursor:pointer; user-select:none; }
+    .sort-btn:hover { background:#e2e8f0; }
+    .sort-btn.active { background:#d1fae5; }
+    .tag { display:inline-block; padding:1px 6px; border-radius:9999px; font-size:11px; font-weight:500; }
+  </style>
+</head>
+<body class="min-h-screen pb-10">
+
+  <!-- 顶栏 -->
+  <div class="sticky top-0 z-30 bg-emerald-600 text-white px-4 py-3 flex justify-between items-center shadow">
+    <div>
+      <div class="font-bold text-lg">食材信息表</div>
+      <div class="text-xs opacity-80" id="statLine">加载中...</div>
+    </div>
+    <div class="flex gap-2">
+      <a href="recommend.html" class="bg-white/20 px-3 py-1.5 rounded-lg text-sm active:bg-white/30 no-underline text-white">推荐</a>
+    </div>
+  </div>
+
+  <!-- 筛选栏 -->
+  <div class="mx-4 mt-3 flex flex-wrap gap-1.5" id="filterBar"></div>
+
+  <!-- 排序/搜索栏 -->
+  <div class="mx-4 mt-2 flex items-center gap-2">
+    <input type="text" id="searchInput" placeholder="搜索食材..." class="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500">
+    <select id="sortSelect" class="border border-slate-300 rounded-lg px-2 py-1.5 text-sm">
+      <option value="default">按品类</option>
+      <option value="protein">按蛋白↓</option>
+      <option value="carbs">按碳水↓</option>
+      <option value="fat">按脂肪↓</option>
+      <option value="fiber">按纤维↓</option>
+      <option value="price">按价格↑</option>
+      <option value="proteinPerYuan">按蛋白性价比↓</option>
+    </select>
+  </div>
+
+  <!-- 图例 -->
+  <div class="mx-4 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+    <span>餐次适配:</span>
+    <span class="meal-dot low">L</span> 低(&le;3)
+    <span class="meal-dot mid">M</span> 中(4-5)
+    <span class="meal-dot high">H</span> 高(6-8)
+    <span class="meal-dot top">T</span> 极高(&ge;9)
+    <span class="ml-2"> Macros = 每100g</span>
+  </div>
+
+  <!-- 食材列表容器 -->
+  <div id="foodsContainer" class="mx-4 mt-3"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  var MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'];
+  var MEAL_LABELS = { breakfast: '早', lunch: '午', dinner: '晚', snack: '加' };
+
+  // 与 recommend.js 同步的餐次权重
+  var MEAL_WEIGHT_DEFAULTS = {
+    '鲜肉':   [2, 8, 8, 3],
+    '成品肉': [4, 5, 4, 8],
+    '蛋奶':   [9, 4, 3, 7],
+    '豆类':   [3, 6, 6, 3],
+    '蛋白粉': [5, 2, 2, 7],
+    '干果':   [3, 3, 2, 7],
+    '主食':   [6, 7, 6, 4],
+    '蔬菜':   [3, 8, 8, 4],
+    '水果':   [5, 5, 4, 7]
+  };
+  var MEAL_WEIGHT_OVERRIDES = {
+    '白米饭':           [2, 10, 9, 1],
+    '面条(熟)':         [4, 10, 8, 2],
+    '红薯':             [6, 6, 5, 8],
+    '燕麦(干)':         [10, 3, 2, 7],
+    '全麦面包':         [9, 4, 3, 8],
+    '馒头':             [9, 6, 5, 3],
+    '玉米':             [5, 5, 5, 7],
+    '小米粥(熟)':       [9, 3, 4, 5],
+    '紫薯':             [5, 5, 5, 7],
+    '鸡蛋':             [10, 7, 4, 5],
+    '希腊酸奶':         [7, 3, 2, 9],
+    '豆浆':             [10, 2, 1, 5],
+    '豆腐干':           [3, 7, 6, 6],
+    '金枪鱼罐头(水浸)': [4, 4, 3, 6],
+    '鸡翅中(冷冻)':     [1, 5, 5, 6],
+    '牛肉干':           [3, 3, 2, 8],
+    '黄瓜':             [3, 7, 7, 7],
+    '紫菜(干)':         [5, 4, 4, 4],
+    '香蕉':             [8, 6, 4, 9]
+  };
+
+  function getMealWeights(food) {
+    var catDefault = MEAL_WEIGHT_DEFAULTS[food.cat] || [5,5,5,5];
+    return MEAL_WEIGHT_OVERRIDES[food.name] || catDefault;
+  }
+
+  function dotClass(v) {
+    if (v >= 9) return 'top';
+    if (v >= 6) return 'high';
+    if (v >= 4) return 'mid';
+    return 'low';
+  }
+
+  function dotLabel(v) {
+    if (v >= 9) return 'T';
+    if (v >= 6) return 'H';
+    if (v >= 4) return 'M';
+    return 'L';
+  }
+
+  // 单位热量 (kcal/100g)
+  function calcCal(food) {
+    return Math.round(food.protein * 4 + food.carbs * 4 + food.fat * 9);
+  }
+
+  // 蛋白性价比 (g/元)
+  function proteinPerYuan(food) {
+    return food.price > 0 ? (food.protein / food.price * 1000).toFixed(1) : 0;
+  }
+
+  // 热量密度等级
+  function calDensityTag(cal) {
+    if (cal <= 50)  return '<span class="tag bg-emerald-100 text-emerald-700">极低</span>';
+    if (cal <= 150) return '<span class="tag bg-green-100 text-green-700">低</span>';
+    if (cal <= 300) return '<span class="tag bg-amber-100 text-amber-700">中</span>';
+    return '<span class="tag bg-red-100 text-red-700">高</span>';
+  }
+
+  var activeCategory = 'all';
+  var currentSort = 'default';
+  var searchText = '';
+
+  function render() {
+    var foods = window.PROTEIN_DB.foods;
+    var categories = window.PROTEIN_DB.categories;
+
+    // 统计
+    document.getElementById('statLine').textContent =
+      '共 ' + foods.length + ' 种食材，' + categories.length + ' 个品类';
+
+    // 筛选栏
+    var filterHtml = '<button class="text-xs px-2.5 py-1 rounded-full border font-medium ' +
+      (activeCategory === 'all' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200') +
+      '" data-cat="all">全部</button>';
+    categories.forEach(function(cat) {
+      var active = activeCategory === cat;
+      filterHtml += '<button class="text-xs px-2.5 py-1 rounded-full border font-medium ' +
+        (active ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200') +
+        '" data-cat="' + cat + '">' + cat + '</button>';
+    });
+    document.getElementById('filterBar').innerHTML = filterHtml;
+
+    // 过滤 & 排序
+    var filtered = foods.filter(function(f) {
+      if (activeCategory !== 'all' && f.cat !== activeCategory) return false;
+      if (searchText && f.name.indexOf(searchText) === -1 && (f.note || '').indexOf(searchText) === -1) return false;
+      return true;
+    });
+
+    if (currentSort === 'protein') {
+      filtered.sort(function(a,b){ return b.protein - a.protein; });
+    } else if (currentSort === 'carbs') {
+      filtered.sort(function(a,b){ return b.carbs - a.carbs; });
+    } else if (currentSort === 'fat') {
+      filtered.sort(function(a,b){ return b.fat - a.fat; });
+    } else if (currentSort === 'fiber') {
+      filtered.sort(function(a,b){ return b.fiber - a.fiber; });
+    } else if (currentSort === 'price') {
+      filtered.sort(function(a,b){ return a.price - b.price; });
+    } else if (currentSort === 'proteinPerYuan') {
+      filtered.sort(function(a,b){ return parseFloat(proteinPerYuan(b)) - parseFloat(proteinPerYuan(a)); });
+    }
+
+    // 渲染
+    var html = '';
+
+    if (currentSort === 'default') {
+      // 按品类分组
+      var catOrder = activeCategory === 'all' ? categories : [activeCategory];
+      catOrder.forEach(function(cat) {
+        var catFoods = filtered.filter(function(f){ return f.cat === cat; });
+        if (catFoods.length === 0) return;
+        html += renderCategory(cat, catFoods);
+      });
+    } else {
+      html += renderCategory('排序结果', filtered);
+    }
+
+    document.getElementById('foodsContainer').innerHTML = html || '<p class="text-center text-slate-400 mt-8">无匹配食材</p>';
+  }
+
+  function renderCategory(catName, foods) {
+    var html = '<div class="mb-4">' +
+      '<h3 class="text-sm font-bold text-slate-700 mb-1.5 flex items-center gap-2">' +
+      '<span class="inline-block w-1 h-4 bg-emerald-500 rounded"></span>' + catName +
+      '<span class="text-xs font-normal text-slate-400">' + foods.length + '种</span></h3>';
+
+    // 表格头
+    html += '<div class="overflow-x-auto -mx-1"><table class="w-full text-xs border-collapse">' +
+      '<thead><tr class="bg-slate-50 text-slate-500">' +
+      '<th class="text-left py-1.5 px-1.5 font-medium sticky left-0 bg-slate-50 min-w-[80px]">食材</th>' +
+      '<th class="text-right py-1.5 px-1 font-medium">蛋白</th>' +
+      '<th class="text-right py-1.5 px-1 font-medium">碳水</th>' +
+      '<th class="text-right py-1.5 px-1 font-medium">脂肪</th>' +
+      '<th class="text-right py-1.5 px-1 font-medium">纤维</th>' +
+      '<th class="text-right py-1.5 px-1 font-medium">热量</th>' +
+      '<th class="text-right py-1.5 px-1 font-medium">元/kg</th>' +
+      '<th class="text-center py-1.5 px-1 font-medium">性价比</th>' +
+      '<th class="text-center py-1.5 px-1 font-medium" title="推荐权重">权重</th>' +
+      '<th class="text-center py-1.5 px-1 font-medium">早</th>' +
+      '<th class="text-center py-1.5 px-1 font-medium">午</th>' +
+      '<th class="text-center py-1.5 px-1 font-medium">晚</th>' +
+      '<th class="text-center py-1.5 px-1 font-medium">加</th>' +
+      '</tr></thead><tbody>';
+
+    foods.forEach(function(f) {
+      var cal = calcCal(f);
+      var ppy = proteinPerYuan(f);
+      var mw = getMealWeights(f);
+      var w = f.weight || 5;
+
+      // 蛋白性价比标签
+      var ppyNum = parseFloat(ppy);
+      var ppyTag = '';
+      if (ppyNum >= 30) ppyTag = '<span class="tag bg-emerald-100 text-emerald-700">优</span>';
+      else if (ppyNum >= 15) ppyTag = '<span class="tag bg-blue-100 text-blue-700">良</span>';
+      else if (ppyNum >= 5) ppyTag = '<span class="tag bg-slate-100 text-slate-600">中</span>';
+      else ppyTag = '<span class="tag bg-red-50 text-red-500">低</span>';
+
+      // 热量密度
+      var calTag = calDensityTag(cal);
+
+      // 推荐权重条
+      var wBar = '<div class="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:' + (w * 10) + '%"></div></div>';
+
+      html += '<tr class="border-b border-slate-100 hover:bg-slate-50">' +
+        '<td class="py-1.5 px-1.5 font-medium text-slate-800 sticky left-0 bg-white">' + f.name + '</td>' +
+        '<td class="text-right py-1.5 px-1 font-data ' + (f.protein >= 20 ? 'text-emerald-600 font-semibold' : 'text-slate-700') + '">' + f.protein + '</td>' +
+        '<td class="text-right py-1.5 px-1 font-data ' + (f.carbs >= 30 ? 'text-amber-600 font-semibold' : 'text-slate-700') + '">' + f.carbs + '</td>' +
+        '<td class="text-right py-1.5 px-1 font-data ' + (f.fat >= 20 ? 'text-rose-500 font-semibold' : 'text-slate-700') + '">' + f.fat + '</td>' +
+        '<td class="text-right py-1.5 px-1 font-data text-slate-700">' + f.fiber + '</td>' +
+        '<td class="text-right py-1.5 px-1 font-data text-slate-700">' + cal + calTag + '</td>' +
+        '<td class="text-right py-1.5 px-1 font-data text-slate-700">' + f.price + '</td>' +
+        '<td class="text-center py-1.5 px-1 font-data">' + ppy + ' ' + ppyTag + '</td>' +
+        '<td class="text-center py-1.5 px-1">' + w + wBar + '</td>' +
+        '<td class="text-center py-1.5 px-0.5"><span class="meal-dot ' + dotClass(mw[0]) + '" title="早餐适配度 ' + mw[0] + '">' + dotLabel(mw[0]) + '</span></td>' +
+        '<td class="text-center py-1.5 px-0.5"><span class="meal-dot ' + dotClass(mw[1]) + '" title="午餐适配度 ' + mw[1] + '">' + dotLabel(mw[1]) + '</span></td>' +
+        '<td class="text-center py-1.5 px-0.5"><span class="meal-dot ' + dotClass(mw[2]) + '" title="晚餐适配度 ' + mw[2] + '">' + dotLabel(mw[2]) + '</span></td>' +
+        '<td class="text-center py-1.5 px-0.5"><span class="meal-dot ' + dotClass(mw[3]) + '" title="加餐适配度 ' + mw[3] + '">' + dotLabel(mw[3]) + '</span></td>' +
+        '</tr>';
+    });
+
+    html += '</tbody></table></div></div>';
+    return html;
+  }
+
+  // 事件绑定
+  document.getElementById('filterBar').addEventListener('click', function(e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    activeCategory = btn.getAttribute('data-cat');
+    render();
+  });
+
+  document.getElementById('searchInput').addEventListener('input', function() {
+    searchText = this.value.trim();
+    render();
+  });
+
+  document.getElementById('sortSelect').addEventListener('change', function() {
+    currentSort = this.value;
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
