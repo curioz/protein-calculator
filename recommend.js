@@ -38,11 +38,12 @@
     proteinRatios: [0.25, 0.35, 0.30, 0.10],
     carbsRatios:  [0.30, 0.35, 0.25, 0.10],
     slotExcludes: {
-      breakfast: ['蛋白粉'],
-      lunch: [],
-      dinner: ['蛋奶'],
-      snack: ['鲜肉', '成品肉']
-    }
+      breakfast: ['鲜肉', '蛋白粉'],
+      lunch: ['蛋白粉'],
+      dinner: ['蛋奶', '蛋白粉'],
+      snack: ['鲜肉', '主食', '豆类', '成品肉']
+    },
+    cookingOil: { breakfast: 0, lunch: 10, dinner: 10, snack: 0 }
   };
 
   // ========== 设置管理 ==========
@@ -540,7 +541,24 @@
 
   var EMPTY_RESULT = { items: [], totalProtein: 0, totalCarbs: 0, totalFat: 0, totalFiber: 0, totalCalories: 0, totalCost: 0 };
 
-  function selectMeal(targetProtein, targetCarbs, foods, usageCounts) {
+  /** 为含蛋白菜品的餐附加烹调油 */
+  function addCookingOil(meal, oilGrams) {
+    if (!oilGrams || oilGrams <= 0) return meal;
+    // 无蛋白菜品则不加
+    var hasProteinItem = meal.items.some(function(item) { return !isCarbFoodByName(item.name); });
+    if (!hasProteinItem) return meal;
+    var oilFat = +(oilGrams).toFixed(1);
+    var oilCal = Math.round(oilGrams * 9);
+    meal.items.push({
+      name: '烹调油', amount: oilGrams + 'g', grams: oilGrams,
+      protein: 0, carbs: 0, fat: oilFat, fiber: 0, calories: oilCal, cost: 0
+    });
+    meal.totalFat = +(meal.totalFat + oilFat).toFixed(1);
+    meal.totalCalories = meal.totalCalories + oilCal;
+    return meal;
+  }
+
+  function selectMeal(targetProtein, targetCarbs, foods, usageCounts, oilGrams) {
     // 先选碳水，以便知道碳水食物贡献了多少蛋白质
     var carbResult = selectCarbItems(targetCarbs, foods, usageCounts) || EMPTY_RESULT;
     // 从蛋白目标中扣除碳水食物的蛋白贡献（不低于目标的40%）
@@ -549,7 +567,7 @@
     var proteinResult = selectProteinItems(adjustedProteinTarget, foods, usageCounts) || EMPTY_RESULT;
 
     var allItems = proteinResult.items.concat(carbResult.items);
-    return {
+    var meal = {
       items: allItems,
       totalProtein: +(proteinResult.totalProtein + carbResult.totalProtein).toFixed(1),
       totalCarbs: +(proteinResult.totalCarbs + carbResult.totalCarbs).toFixed(1),
@@ -558,6 +576,8 @@
       totalCalories: (proteinResult.totalCalories || 0) + (carbResult.totalCalories || 0),
       totalCost: +(proteinResult.totalCost + carbResult.totalCost).toFixed(1)
     };
+    addCookingOil(meal, oilGrams || 0);
+    return meal;
   }
 
   function generatePlan(foods, settings, history) {
@@ -566,12 +586,13 @@
     var excludes = settings.slotExcludes || {};
     var pRatios = settings.proteinRatios || settings.ratios || DEFAULT_SETTINGS.proteinRatios;
     var cRatios = settings.carbsRatios || DEFAULT_SETTINGS.carbsRatios;
+    var oil = settings.cookingOil || DEFAULT_SETTINGS.cookingOil;
 
     MEAL_SLOTS.forEach(function(slot, i) {
       var proteinTarget = settings.proteinTarget * pRatios[i];
       var carbsTarget = (settings.carbsTarget || 250) * cRatios[i];
       var filtered = filterByExcludes(foods, excludes[slot]);
-      plan.meals[slot] = selectMeal(proteinTarget, carbsTarget, filtered, usageCounts);
+      plan.meals[slot] = selectMeal(proteinTarget, carbsTarget, filtered, usageCounts, oil[slot] || 0);
     });
 
     return plan;
@@ -584,8 +605,9 @@
     var proteinTarget = settings.proteinTarget * pRatios[idx];
     var carbsTarget = (settings.carbsTarget || 250) * cRatios[idx];
     var excludes = settings.slotExcludes || {};
+    var oil = settings.cookingOil || DEFAULT_SETTINGS.cookingOil;
     var filtered = filterByExcludes(foods, excludes[slot]);
-    return selectMeal(proteinTarget, carbsTarget, filtered, getUsageCounts(history));
+    return selectMeal(proteinTarget, carbsTarget, filtered, getUsageCounts(history), oil[slot] || 0);
   }
 
   // ========== 当日推荐存取 ==========
@@ -681,10 +703,12 @@
     var label = MEAL_LABELS[slot];
 
     var itemsHtml = mealData.items.map(function(item) {
-      var nutrientParts = [item.protein + 'g蛋白'];
+      var nutrientParts = [];
+      if (item.protein > 0) nutrientParts.push(item.protein + 'g蛋白');
       if (item.carbs > 0) nutrientParts.push(item.carbs + 'g碳水');
       if (item.fat > 0) nutrientParts.push(item.fat + 'g脂');
       if (item.fiber > 0.1) nutrientParts.push(item.fiber + 'g纤');
+      if (item.calories > 0 && item.protein === 0 && item.carbs === 0) nutrientParts.push(item.calories + 'kcal');
       return '<div class="flex justify-between text-sm items-center">' +
         '<span class="text-slate-700">' + item.name + ' <span class="text-xs text-slate-400">' + item.amount + '</span></span>' +
         '<span class="text-slate-400 font-data text-xs">' + nutrientParts.join(' ') + '</span>' +
@@ -779,6 +803,7 @@
     if (!currentSettings.bodyAge) currentSettings.bodyAge = DEFAULT_SETTINGS.bodyAge;
     if (!currentSettings.gender) currentSettings.gender = DEFAULT_SETTINGS.gender;
     if (!currentSettings.activity) currentSettings.activity = DEFAULT_SETTINGS.activity;
+    if (!currentSettings.cookingOil) currentSettings.cookingOil = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.cookingOil));
     if (!currentSettings.carbsRatios) currentSettings.carbsRatios = DEFAULT_SETTINGS.carbsRatios.slice();
     if (!currentSettings.proteinRatios) {
       // 旧版用 ratios 字段，迁移到 proteinRatios
@@ -876,6 +901,7 @@
     renderRatioSliders('protein', currentSettings.proteinRatios);
     renderRatioSliders('carbs', currentSettings.carbsRatios);
     renderExcludeChips();
+    renderCookingOil();
     $('settingsModal').classList.remove('hidden');
   }
 
@@ -1032,6 +1058,33 @@
         var idx = arr.indexOf(cat);
         if (idx === -1) { arr.push(cat); } else { arr.splice(idx, 1); }
         renderExcludeChips();
+      });
+    });
+  }
+
+  function renderCookingOil() {
+    var oil = currentSettings.cookingOil || DEFAULT_SETTINGS.cookingOil;
+    var labels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐', snack: '🍪 加餐' };
+    var html = '<p class="text-sm font-medium text-slate-700 mb-2">烹调油 <span class="text-xs text-slate-400 font-normal">每餐附加克数</span></p>';
+
+    MEAL_SLOTS.forEach(function(slot) {
+      var val = oil[slot] || 0;
+      html += '<div class="flex items-center gap-2 mb-1.5">' +
+        '<span class="text-xs text-slate-500 w-14 shrink-0">' + labels[slot] + '</span>' +
+        '<input type="range" class="flex-1 oil-slider" min="0" max="20" step="1" value="' + val + '" data-slot="' + slot + '">' +
+        '<span class="text-sm font-data text-slate-700 w-10 text-right oil-display">' + val + 'g</span>' +
+      '</div>';
+    });
+
+    $('oilSection').innerHTML = html;
+
+    document.querySelectorAll('.oil-slider').forEach(function(slider) {
+      slider.addEventListener('input', function() {
+        var slot = this.getAttribute('data-slot');
+        var val = parseInt(this.value);
+        if (!currentSettings.cookingOil) currentSettings.cookingOil = {};
+        currentSettings.cookingOil[slot] = val;
+        this.nextElementSibling.textContent = val + 'g';
       });
     });
   }
