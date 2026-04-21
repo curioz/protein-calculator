@@ -76,6 +76,10 @@
 - Chart.js（CDN）
 - localStorage 数据持久化
 
+## 更新日志
+
+见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 数据来源
 
 - 价格：中国大陆线上电商（京东/淘宝/拼多多），2026 年 4 月

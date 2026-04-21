@@ -1,6 +1,51 @@
 (function() {
   'use strict';
 
+  // ========== HTML ESCAPE (XSS prevention) ==========
+  function esc(s) { if (s == null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+  /** 获取食物数据：优先使用用户在计算器页修改过的数据 */
+  function getFoods() {
+    try {
+      var saved = localStorage.getItem('proteinCalcData');
+      if (saved) {
+        var parsed = JSON.parse(saved);
+        if (parsed && parsed.foods && parsed.foods.length > 0) {
+          return parsed.foods;
+        }
+      }
+    } catch(e) {}
+    return window.PROTEIN_DB.foods;
+  }
+
+  /** 获取品类列表：与食物数据同步 */
+  function getCategories() {
+    try {
+      var saved = localStorage.getItem('proteinCalcData');
+      if (saved) {
+        var parsed = JSON.parse(saved);
+        if (parsed && parsed.categories && parsed.categories.length > 0) {
+          return parsed.categories;
+        }
+      }
+    } catch(e) {}
+    return window.PROTEIN_DB.categories;
+  }
+
+  // ========== TOAST ==========
+  function showToast(msg) {
+    var el = document.getElementById('appToast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.remove('opacity-0','pointer-events-none');
+    el.classList.add('opacity-100');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(function() {
+      el.classList.remove('opacity-100');
+      el.classList.add('opacity-0','pointer-events-none');
+    }, 2500);
+  }
+
   // ========== 常量 ==========
   var STORAGE_SETTINGS = 'recommendSettings';
   var STORAGE_HISTORY = 'recommendHistory';
@@ -98,7 +143,8 @@
   }
 
   function saveSettings(settings) {
-    localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(settings));
+    try { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(settings)); }
+    catch(e) { showToast('存储空间不足，请清理浏览器数据'); }
   }
 
   // ========== 历史管理 ==========
@@ -111,7 +157,8 @@
   }
 
   function saveHistory(history) {
-    localStorage.setItem(STORAGE_HISTORY, JSON.stringify(history));
+    try { localStorage.setItem(STORAGE_HISTORY, JSON.stringify(history)); }
+    catch(e) { showToast('存储空间不足，请清理浏览器数据'); }
   }
 
   function getTodayKey() {
@@ -192,7 +239,7 @@
   function computeWeights(foods, usageCounts, mode, slot) {
     return foods.map(function(food) {
       var key = mode === 'carbs' ? food.carbs : food.protein;
-      var perYuan = (key / food.price) * 1000;
+      var perYuan = food.price > 0 ? (key / food.price) * 1000 : 0;
       var baseWeight = Math.max(perYuan, 0.1);
       var mw = slot ? getMealWeight(food, slot) : (food.weight || 5);
       var usedCount = usageCounts[food.name] || 0;
@@ -240,7 +287,7 @@
 
   /** 按名称查找食物并判断是否碳水品类 */
   function isCarbFoodByName(name) {
-    var foods = window.PROTEIN_DB.foods;
+    var foods = getFoods();
     for (var i = 0; i < foods.length; i++) {
       if (foods[i].name === name) return isCarbFood(foods[i]);
     }
@@ -270,6 +317,7 @@
 
     for (var retry = 0; retry < maxRetries; retry++) {
       var weights = computeWeights(proteinFoods, usageCounts, 'protein', slot);
+      var items = [];
       var totalProtein = 0, totalCarbs = 0, totalFat = 0, totalFiber = 0, totalCalories = 0, totalCost = 0;
       var selectedNames = {};
 
@@ -549,7 +597,7 @@
 
   /** 按名称查找食物数据 */
   function findFoodByName(name) {
-    var foods = window.PROTEIN_DB.foods;
+    var foods = getFoods();
     for (var i = 0; i < foods.length; i++) {
       if (foods[i].name === name) return foods[i];
     }
@@ -592,7 +640,7 @@
     if (vegFoods.length === 0) return meal;
     // 按性价比×餐次权重随机选一个蔬菜
     var weights = vegFoods.map(function(f) {
-      var perYuan = (f.fiber / f.price) * 1000;
+      var perYuan = f.price > 0 ? (f.fiber / f.price) * 1000 : 0;
       var mw = slot ? getMealWeight(f, slot) : (f.weight || 5);
       var usedCount = usageCounts[f.name] || 0;
       return Math.max(perYuan, 0.1) * mw * Math.pow(0.3, usedCount);
@@ -699,7 +747,8 @@
 
   function saveToday(plan) {
     plan.date = getTodayKey();
-    localStorage.setItem(STORAGE_TODAY, JSON.stringify(plan));
+    try { localStorage.setItem(STORAGE_TODAY, JSON.stringify(plan)); }
+    catch(e) { showToast('存储空间不足，请清理浏览器数据'); }
   }
 
   // ========== UI 渲染 ==========
@@ -792,7 +841,7 @@
       if (item.fiber > 0.1) nutrientParts.push(item.fiber + 'g纤');
       if (item.calories > 0 && item.protein === 0 && item.carbs === 0) nutrientParts.push(item.calories + 'kcal');
       return '<div class="flex justify-between text-sm items-center">' +
-        '<span class="text-slate-700">' + item.name + ' <span class="text-xs text-slate-400">' + item.amount + '</span></span>' +
+        '<span class="text-slate-700">' + esc(item.name) + ' <span class="text-xs text-slate-400">' + esc(item.amount) + '</span></span>' +
         '<span class="text-slate-400 font-data text-xs">' + nutrientParts.join(' ') + '</span>' +
       '</div>';
     }).join('');
@@ -931,7 +980,7 @@
   }
 
   function generateAndRender() {
-    var foods = window.PROTEIN_DB.foods;
+    var foods = getFoods();
     var history = loadHistory();
     currentPlan = generatePlan(foods, currentSettings, history);
     saveToday(currentPlan);
@@ -940,7 +989,7 @@
   }
 
   function regenerateSlotAndRender(slot) {
-    var foods = window.PROTEIN_DB.foods;
+    var foods = getFoods();
     var history = loadHistory();
     var newMeal = regenerateSlot(foods, currentSettings, history, slot);
     currentPlan.meals[slot] = newMeal;
@@ -1112,7 +1161,7 @@
   }
 
   function renderExcludeChips() {
-    var categories = window.PROTEIN_DB.categories;
+    var categories = getCategories();
     var excludes = currentSettings.slotExcludes || {};
     var labels = { breakfast: '🌅 早餐', lunch: '☀️ 午餐', dinner: '🌙 晚餐', snack: '🍪 加餐' };
     var html = '<p class="text-sm font-medium text-slate-700 mb-2">品类限制 <span class="text-xs text-slate-400 font-normal">点击排除/恢复</span></p>';

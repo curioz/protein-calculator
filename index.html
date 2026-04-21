@@ -391,13 +391,17 @@
     }
 
     function saveState() {
-      localStorage.setItem(LS_KEY, JSON.stringify(state));
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(state));
+      } catch(e) {
+        showToast('存储空间不足，请导出数据后清理浏览器存储');
+      }
       markDirty();
     }
 
     function recalcCosts() {
       state.foods.forEach(f => {
-        f.cost = parseFloat((50 * f.price / f.protein).toFixed(1));
+        f.cost = f.protein > 0 ? parseFloat((50 * f.price / f.protein).toFixed(1)) : 0;
       });
     }
 
@@ -815,7 +819,7 @@
           { n:'北豆腐',        g:150, meal:'早餐' },
           { n:'鸡胸肉(冷冻)',  g:150, meal:'午餐' },
           { n:'豆腐干',        g:80,  meal:'午餐' },
-          { n:'鸭肉(冷冻白条鸭)', g:100, meal:'晚餐' },
+          { n:'鸭肉(冷冻)', g:100, meal:'晚餐' },
           { n:'腐竹(干)',      g:15,  meal:'晚餐' },
           { n:'花生(带壳生)',  g:25,  meal:'加餐' },
         ],
@@ -834,7 +838,7 @@
           { n:'腐竹(干)',          g:20,  meal:'午餐' },
           { n:'乳清蛋白粉(分离)',  g:30,  meal:'加餐' },
           { n:'南瓜子(带壳)',      g:20,  meal:'加餐' },
-          { n:'牛肉(鲜)',          g:120, meal:'晚餐' },
+          { n:'牛腱子',          g:120, meal:'晚餐' },
         ],
       };
       presets[plan].forEach(p => {

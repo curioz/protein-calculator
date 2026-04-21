@@ -68,6 +68,9 @@
 (function() {
   'use strict';
 
+  // ========== HTML ESCAPE (XSS prevention) ==========
+  function esc(s) { if (s == null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
   var MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'];
   var MEAL_LABELS = { breakfast: '早', lunch: '午', dinner: '晚', snack: '加' };
 
@@ -162,7 +165,7 @@
       var active = activeCategory === cat;
       filterHtml += '<button class="text-xs px-2.5 py-1 rounded-full border font-medium ' +
         (active ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200') +
-        '" data-cat="' + cat + '">' + cat + '</button>';
+        '" data-cat="' + esc(cat) + '">' + esc(cat) + '</button>';
     });
     document.getElementById('filterBar').innerHTML = filterHtml;
 
@@ -208,7 +211,7 @@
   function renderCategory(catName, foods) {
     var html = '<div class="mb-4">' +
       '<h3 class="text-sm font-bold text-slate-700 mb-1.5 flex items-center gap-2">' +
-      '<span class="inline-block w-1 h-4 bg-emerald-500 rounded"></span>' + catName +
+      '<span class="inline-block w-1 h-4 bg-emerald-500 rounded"></span>' + esc(catName) +
       '<span class="text-xs font-normal text-slate-400">' + foods.length + '种</span></h3>';
 
     // 表格头
@@ -250,7 +253,7 @@
       var wBar = '<div class="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:' + (w * 10) + '%"></div></div>';
 
       html += '<tr class="border-b border-slate-100 hover:bg-slate-50">' +
-        '<td class="py-1.5 px-1.5 font-medium text-slate-800 sticky left-0 bg-white">' + f.name + '</td>' +
+        '<td class="py-1.5 px-1.5 font-medium text-slate-800 sticky left-0 bg-white">' + esc(f.name) + '</td>' +
         '<td class="text-right py-1.5 px-1 font-data ' + (f.protein >= 20 ? 'text-emerald-600 font-semibold' : 'text-slate-700') + '">' + f.protein + '</td>' +
         '<td class="text-right py-1.5 px-1 font-data ' + (f.carbs >= 30 ? 'text-amber-600 font-semibold' : 'text-slate-700') + '">' + f.carbs + '</td>' +
         '<td class="text-right py-1.5 px-1 font-data ' + (f.fat >= 20 ? 'text-rose-500 font-semibold' : 'text-slate-700') + '">' + f.fat + '</td>' +

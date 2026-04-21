@@ -266,8 +266,8 @@
       if (defaults) state = defaults;
     }
 
-    function saveState() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
-    function recalcCosts() { state.foods.forEach(f => { f.cost = parseFloat((50 * f.price / f.protein).toFixed(1)); }); }
+    function saveState() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e) { showToast('存储空间不足，请导出数据后清理浏览器存储'); } }
+    function recalcCosts() { state.foods.forEach(f => { f.cost = f.protein > 0 ? parseFloat((50 * f.price / f.protein).toFixed(1)) : 0; }); }
 
     // ========== TAB SWITCHING ==========
     function switchTab(tab) {
@@ -512,9 +512,9 @@
     function loadPreset(plan) {
       comboItems = [];
       const presets = {
-        A: [{ n:'鸡蛋',g:120 },{ n:'北豆腐',g:150 },{ n:'鸡胸肉(冷冻)',g:150 },{ n:'豆腐干',g:80 },{ n:'鸭肉(冷冻白条鸭)',g:100 },{ n:'腐竹(干)',g:15 },{ n:'花生(带壳生)',g:25 }],
+        A: [{ n:'鸡蛋',g:120 },{ n:'北豆腐',g:150 },{ n:'鸡胸肉(冷冻)',g:150 },{ n:'豆腐干',g:80 },{ n:'鸭肉(冷冻)',g:100 },{ n:'腐竹(干)',g:15 },{ n:'花生(带壳生)',g:25 }],
         B: [{ n:'鸡蛋',g:120 },{ n:'纯牛奶(普通)',g:250 },{ n:'猪瘦肉',g:150 },{ n:'北豆腐',g:100 },{ n:'乳清蛋白粉(浓缩)',g:30 },{ n:'鸡胸肉(冷冻)',g:120 }],
-        C: [{ n:'鸡蛋',g:120 },{ n:'纯牛奶(普通)',g:250 },{ n:'即食鸡胸肉',g:100 },{ n:'腐竹(干)',g:20 },{ n:'乳清蛋白粉(分离)',g:30 },{ n:'南瓜子(带壳)',g:20 },{ n:'牛肉(鲜)',g:120 }],
+        C: [{ n:'鸡蛋',g:120 },{ n:'纯牛奶(普通)',g:250 },{ n:'即食鸡胸肉',g:100 },{ n:'腐竹(干)',g:20 },{ n:'乳清蛋白粉(分离)',g:30 },{ n:'南瓜子(带壳)',g:20 },{ n:'牛腱子',g:120 }],
       };
       presets[plan].forEach(p => {
         const food = state.foods.find(f => f.name === p.n);
