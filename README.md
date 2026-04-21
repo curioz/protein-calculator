@@ -69,6 +69,10 @@
 | [recommend.html](https://curioz.github.io/protein-calculator/recommend.html) | 每日饮食推荐（移动端优先） |
 | [foods.html](https://curioz.github.io/protein-calculator/foods.html) | 食材信息参考表 |
 
+## 常见问题
+
+见 [FAQ.md](FAQ.md)。
+
 ## 技术栈
 
 - Vanilla JavaScript
