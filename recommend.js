@@ -90,12 +90,21 @@
     '紫菜(干)':         [5, 4, 4, 4],
     '香蕉':             [8, 6, 4, 9]
   };
-  /** 获取食材在某餐的综合权重 = 基础偏好 × 餐次适配 */
+  /** 判断食物是否为用户喜好 */
+  function isFavorite(food) {
+    var favs = currentSettings.favorites || {};
+    var catFavs = favs[food.cat];
+    return catFavs && catFavs.indexOf(food.name) !== -1;
+  }
+
+  /** 获取食材在某餐的综合权重 = 基础偏好 × 餐次适配 × 喜好加成 */
+  var FAVORITE_BOOST = 10;
   function getMealWeight(food, slot) {
     var idx = MEAL_SLOTS.indexOf(slot);
     var catDefault = MEAL_WEIGHT_DEFAULTS[food.cat] || [5, 5, 5, 5];
     var mealW = (MEAL_WEIGHT_OVERRIDES[food.name] || catDefault)[idx];
-    return (food.weight || 5) * (mealW || 5);
+    var favBoost = isFavorite(food) ? FAVORITE_BOOST : 1;
+    return (food.weight || 5) * (mealW || 5) * favBoost;
   }
   // 活动系数（TDEE = BMR × 活动系数）
   var ACTIVITY_FACTORS = {
@@ -130,7 +139,8 @@
       snack: ['鲜肉', '主食', '豆类', '成品肉']
     },
     cookingOil: { breakfast: 0, lunch: 10, dinner: 10, snack: 0 },
-    veggieSlots: ['breakfast', 'lunch', 'dinner']
+    veggieSlots: ['breakfast', 'lunch', 'dinner'],
+    favorites: {}
   };
 
   // ========== 设置管理 ==========
@@ -941,6 +951,7 @@
       // 旧版用 ratios 字段，迁移到 proteinRatios
       currentSettings.proteinRatios = currentSettings.ratios || DEFAULT_SETTINGS.proteinRatios.slice();
     }
+    if (!currentSettings.favorites) currentSettings.favorites = {};
     renderDate();
     renderProfileBar(currentSettings);
 
@@ -970,6 +981,20 @@
     $('settingsClose').addEventListener('click', closeSettings);
     $('settingsOverlay').addEventListener('click', closeSettings);
     $('settingsSave').addEventListener('click', saveSettingsAndRegenerate);
+
+    // 喜好食材事件委托（一次性绑定）
+    $('favoriteSection').addEventListener('click', function(e) {
+      var btn = e.target.closest('.fav-chip');
+      if (!btn || btn.disabled) return;
+      var cat = btn.getAttribute('data-cat');
+      var name = btn.getAttribute('data-name');
+      if (!currentSettings.favorites) currentSettings.favorites = {};
+      if (!currentSettings.favorites[cat]) currentSettings.favorites[cat] = [];
+      var arr = currentSettings.favorites[cat];
+      var idx = arr.indexOf(name);
+      if (idx === -1) { arr.push(name); } else { arr.splice(idx, 1); }
+      renderFavorites();
+    });
 
     // 预设按钮
     document.querySelectorAll('.preset-btn').forEach(function(btn) {
@@ -1034,6 +1059,7 @@
     renderRatioSliders('carbs', currentSettings.carbsRatios);
     renderExcludeChips();
     renderCookingOil();
+    renderFavorites();
     $('settingsModal').classList.remove('hidden');
   }
 
@@ -1220,6 +1246,47 @@
         this.nextElementSibling.textContent = val + 'g';
       });
     });
+  }
+
+  var FAVORITE_MAX_PER_CAT = 4;
+
+  function renderFavorites() {
+    var categories = getCategories();
+    var foods = getFoods();
+    var favorites = currentSettings.favorites || {};
+
+    var html = '<p class="text-sm font-medium text-slate-700 mb-2">喜好食材 <span class="text-xs text-slate-400 font-normal">每个品类选 2-4 种，入选食材优先推荐</span></p>';
+
+    categories.forEach(function(cat) {
+      var catFoods = foods.filter(function(f) { return f.cat === cat; });
+      if (catFoods.length === 0) return;
+      var catFavs = favorites[cat] || [];
+      var count = catFavs.length;
+
+      html += '<div class="mb-2">' +
+        '<div class="flex items-center gap-1.5 mb-1">' +
+          '<span class="text-xs font-medium text-slate-600">' + esc(cat) + '</span>' +
+          '<span class="text-xs ' + (count > 0 ? 'text-emerald-600' : 'text-slate-400') + '">' + count + '/' + FAVORITE_MAX_PER_CAT + '</span>' +
+        '</div>' +
+        '<div class="flex flex-wrap gap-1.5">';
+
+      catFoods.forEach(function(f) {
+        var selected = catFavs.indexOf(f.name) !== -1;
+        var disabled = !selected && count >= FAVORITE_MAX_PER_CAT;
+        html += '<button type="button" class="fav-chip text-xs px-2 py-0.5 rounded-full border ' +
+          (selected
+            ? 'bg-emerald-100 border-emerald-400 text-emerald-700 font-medium'
+            : disabled
+              ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+              : 'bg-slate-50 border-slate-200 text-slate-600') +
+          '" data-cat="' + esc(cat) + '" data-name="' + esc(f.name) + '"' +
+          (disabled ? ' disabled' : '') + '>' + esc(f.name) + '</button>';
+      });
+
+      html += '</div></div>';
+    });
+
+    $('favoriteSection').innerHTML = html;
   }
 
   function saveSettingsAndRegenerate() {
