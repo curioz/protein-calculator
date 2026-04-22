@@ -1248,7 +1248,11 @@
     });
   }
 
-  var FAVORITE_MAX_PER_CAT = 4;
+  var FAVORITE_MAX_PER_CAT = { '蔬菜': 10 };
+
+  function getFavMax(cat) {
+    return FAVORITE_MAX_PER_CAT[cat] || 4;
+  }
 
   function renderFavorites() {
     var categories = getCategories();
@@ -1266,13 +1270,13 @@
       html += '<div class="mb-2">' +
         '<div class="flex items-center gap-1.5 mb-1">' +
           '<span class="text-xs font-medium text-slate-600">' + esc(cat) + '</span>' +
-          '<span class="text-xs ' + (count > 0 ? 'text-emerald-600' : 'text-slate-400') + '">' + count + '/' + FAVORITE_MAX_PER_CAT + '</span>' +
+          '<span class="text-xs ' + (count > 0 ? 'text-emerald-600' : 'text-slate-400') + '">' + count + '/' + getFavMax(cat) + '</span>' +
         '</div>' +
         '<div class="flex flex-wrap gap-1.5">';
 
       catFoods.forEach(function(f) {
         var selected = catFavs.indexOf(f.name) !== -1;
-        var disabled = !selected && count >= FAVORITE_MAX_PER_CAT;
+        var disabled = !selected && count >= getFavMax(cat);
         html += '<button type="button" class="fav-chip text-xs px-2 py-0.5 rounded-full border ' +
           (selected
             ? 'bg-emerald-100 border-emerald-400 text-emerald-700 font-medium'
